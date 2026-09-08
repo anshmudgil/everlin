@@ -31,6 +31,13 @@ import {
   ArtifactAction,
   ArtifactContent,
 } from "@/components/ai-elements/artifact";
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
 import { DownloadIcon, PencilIcon } from "lucide-react";
 
 const AGENTS = [
@@ -157,11 +164,34 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
             {messages.map((message) => (
               <Message from={message.role} key={message.id}>
                 <MessageContent>
-                  {message.parts.map((part, i) =>
-                    part.type === "text" ? (
-                      <MessageResponse key={`${message.id}-${i}`}>{part.text}</MessageResponse>
-                    ) : null
-                  )}
+                  {message.parts.map((part, i) => {
+                    if (part.type === "text") {
+                      return (
+                        <MessageResponse key={`${message.id}-${i}`}>{part.text}</MessageResponse>
+                      );
+                    }
+                    // tool calls render as a collapsible "retrieving…" panel — the
+                    // visible signal that a figure came from a real source, not memory.
+                    if (part.type.startsWith("tool-")) {
+                      const p = part as {
+                        type: `tool-${string}`;
+                        state: "input-streaming" | "input-available" | "output-available" | "output-error";
+                        input?: unknown;
+                        output?: unknown;
+                        errorText?: string;
+                      };
+                      return (
+                        <Tool key={`${message.id}-${i}`}>
+                          <ToolHeader type={p.type as `tool-${string}`} state={p.state} />
+                          <ToolContent>
+                            <ToolInput input={p.input} />
+                            <ToolOutput output={p.output as React.ReactNode} errorText={p.errorText} />
+                          </ToolContent>
+                        </Tool>
+                      );
+                    }
+                    return null;
+                  })}
                 </MessageContent>
               </Message>
             ))}
