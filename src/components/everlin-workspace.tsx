@@ -34,8 +34,8 @@ import {
 import { DownloadIcon, PencilIcon } from "lucide-react";
 
 const AGENTS = [
-  { id: "inv", short: "IA", name: "Investment Analyst", model: "Opus 5", status: "ready" },
-  { id: "prop", short: "PA", name: "Property Analyst", model: "Sonnet 5", status: "idle" },
+  { id: "inv", short: "IA", name: "Investment Analyst", model: "Qwen3.7 Flash", status: "ready" },
+  { id: "prop", short: "PA", name: "Property Analyst", model: "Qwen3.7 Flash", status: "idle" },
 ];
 
 export const THREADS = [
@@ -140,9 +140,9 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
             className={`ml-auto rounded-md border px-2.5 py-1 font-mono text-[10px] ${
               icGrade ? "border-accent bg-accent text-accent-foreground" : "text-muted-foreground"
             }`}
-            title="IC-grade routes to Opus; routine routes to Sonnet (spec §31.1)"
+            title="IC-grade vs routine tier (both on Qwen3.7 Flash for now; re-split to premium models later)"
           >
-            {icGrade ? "IC-GRADE · OPUS" : "ROUTINE · SONNET"}
+            {icGrade ? "IC-GRADE" : "ROUTINE"}
           </button>
         </header>
 

@@ -8,11 +8,13 @@ import {
 
 export const maxDuration = 60;
 
-// Per the Everlin spec (§31.1): Sonnet for routine/daily, Opus for IC-grade analysis.
-// Model IDs fetched live from the AI Gateway model list, not memory.
+// Cheapest chat model on the AI Gateway (non-Anthropic): alibaba/qwen3.7-flash
+// ($0.03/M in, $0.13/M out — verified live from the Gateway model list, type=language).
+// Spec §31.1 wants Sonnet(routine)/Opus(ic) tiering; both keys point at the cheap model
+// for now so the UI toggle + routing structure survive an easy re-split later.
 const MODELS = {
-  routine: "anthropic/claude-sonnet-5",
-  ic: "anthropic/claude-opus-5",
+  routine: "alibaba/qwen3.7-flash",
+  ic: "alibaba/qwen3.7-flash",
 } as const;
 
 // Everlin AI Behaviour Standards (spec §6), compressed into a system prompt.
