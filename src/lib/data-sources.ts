@@ -73,8 +73,9 @@ export async function edgarConcept(
 
 // --- US Treasury daily par yield (public fiscal-data API, no key) ---
 export async function treasuryYield(): Promise<Fact> {
+  // Endpoint lives under v2, not v1 (v1 returns 404). Verified live 2026-09-08.
   const url =
-    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/avg_interest_rates?sort=-record_date&page[size]=1";
+    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?sort=-record_date&page[size]=1";
   const base = { label: "US Treasury avg interest rate", source: "US Treasury (fiscaldata.treasury.gov)", sourceUrl: url };
   try {
     const res = await fetch(url, { next: { revalidate: 3600 } });
