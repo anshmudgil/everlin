@@ -8,7 +8,7 @@ import {
   toUIMessageStream,
 } from "ai";
 import { z } from "zod";
-import { edgarConcept, treasuryYield } from "@/lib/data-sources";
+import { edgarConcept, treasuryYield, auCashRate, absSeries } from "@/lib/data-sources";
 
 export const maxDuration = 60;
 
@@ -35,7 +35,13 @@ Non-negotiable behaviour standards:
 
 RETRIEVAL RULE (critical): You have tools that return real, sourced figures. To state ANY specific financial number, you MUST first retrieve it with a tool, then cite the tool's source. If a tool returns value: null or "not obtained", you say "not obtained" — NEVER estimate, recall from memory, or fabricate a number. When you cite a figure, name its source inline (e.g. "revenue $X [SEC EDGAR 10-K FY2024]"). Qualitative reasoning from your own knowledge is fine and should be labelled as opinion; specific figures must come from tools or be marked not-obtained.
 
-Tools available: getCompanyFinancial (SEC EDGAR, US-listed companies only — us-gaap concepts like Revenues, NetIncomeLoss, Assets), getTreasuryRate (US Treasury). If asked about an ASX/AU company these US tools won't have it — say so plainly and mark those figures not obtained.
+Tools available:
+- getCompanyFinancial (SEC EDGAR, US-listed companies only — us-gaap concepts like Revenues, NetIncomeLoss, Assets)
+- getTreasuryRate (US Treasury average interest rate)
+- getAuCashRate (RBA cash rate target — the Australian official interest rate; attribute "Source: RBA", note the RBA does not endorse the use)
+- getAbsMacro (ABS macro: CPI inflation index, or GDP quarterly growth)
+
+Coverage boundary: RBA cash rate and ABS CPI/GDP ARE retrievable — use those tools. But there is NO tool for ASX-listed COMPANY figures (e.g. CBA, BHP, CSL share prices or fundamentals) — no free, licence-safe source exists. For any specific ASX company figure, say so plainly and mark it not obtained. Never substitute a US ticker or estimate.
 
 Base currency AUD. Two lenses: Buffett (core/value) and Wood/Ark (growth). Label which you apply.`;
 
@@ -58,6 +64,20 @@ const tools = {
       "Retrieve the latest US Treasury average interest rate (sourced, from US Treasury fiscal data).",
     inputSchema: z.object({}),
     execute: async () => treasuryYield(),
+  }),
+  getAuCashRate: tool({
+    description:
+      "Retrieve the current Australian cash rate target (sourced, from RBA Table F1). Use for any question about the RBA cash rate / Australian official interest rate. Attribution is RBA; the RBA does not endorse this use.",
+    inputSchema: z.object({}),
+    execute: async () => auCashRate(),
+  }),
+  getAbsMacro: tool({
+    description:
+      "Retrieve a real, sourced Australian macro figure from the ABS (Australian Bureau of Statistics): CPI (inflation index) or GDP (quarterly growth). Returns the value with its source, or a not-obtained marker.",
+    inputSchema: z.object({
+      series: z.enum(["CPI", "GDP"]).describe("Which ABS series: CPI (All-groups index) or GDP (% change per quarter)"),
+    }),
+    execute: async ({ series }) => absSeries(series),
   }),
 };
 
