@@ -1,0 +1,11 @@
+flowchart TD
+  Cron["ASX-open cron (30 23 UTC)"] --> Cal{"Sydney trading day?"}
+  Cal -->|no| Skip["skip (weekend/holiday)"]
+  Cal -->|yes| Head["buildDailyBriefHeadless(asOf)"]
+  Head --> Ret["retrieve: RBA / ABS / Treasury / EIA + ECB FX backup"]
+  Ret --> Reason["buildNarrative: sourced FACTS + gated LLM / deterministic INTERPRETATION"]
+  Reason --> Asm["assemble MorningBrief (figures + sections)"]
+  Asm --> Val["validateOutput (schema + lint)"]
+  Val --> Render["renderBriefPdf (react-pdf, 3 pages, byte-hash)"]
+  Render --> Store["BriefStore.put (fs / Blob, keyed by date)"]
+  Store --> Deliver["delivery seam (Noop; email/SMS/Teams/SharePoint stubs)"]

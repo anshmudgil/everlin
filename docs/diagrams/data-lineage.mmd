@@ -1,0 +1,12 @@
+flowchart LR
+  RBA["RBA F1 / F11.1"] --> Fact["Fact (value + source)"]
+  ABS["ABS CPI / GDP"] --> Fact
+  TREAS["US Treasury fiscal data"] --> Fact
+  EIA["EIA oil"] --> Fact
+  ECB["ECB SDMX (FX backup)"] --> Fact
+  NEWS["news-attribution (<=200 char, outlet)"] --> Claim["Claim (text + source)"]
+  Fact --> Figure["Figure (sourced | calcKey | missing)"]
+  Claim --> Section["SectionReasoning (FACTS)"]
+  Licensed["ASX / S&P / VIX / Gold (licensed IP)"] -.->|not obtained| Figure
+  Figure --> Brief["MorningBrief"]
+  Section --> Brief

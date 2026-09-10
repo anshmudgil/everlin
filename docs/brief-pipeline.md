@@ -70,3 +70,11 @@ are always rendered "not obtained" — never fabricated. See
 converts to Australia/Sydney (DST-aware), skips weekends and ASX holidays, and
 resolves the correct as-of date. Delivery uses the Noop adapter until real
 channels (email/SMS/Teams/SharePoint — stubbed) are wired.
+
+## System diagrams
+
+Rendered from `docs/diagrams/*.mmd` via `mmdc` (regenerate: `mmdc -i x.mmd -o x.png -p pptr.json`).
+
+- **Pipeline flow** — `docs/diagrams/pipeline-flow.png`: cron → trading-day gate → retrieve → narrative → assemble → validate → render → store → deliver.
+- **Data lineage** — `docs/diagrams/data-lineage.png`: how sources become Figures/Claims, and where licensed IP is marked not-obtained.
+- **Reasoning DAG** — `docs/diagrams/reasoning-dag.png`: the 6-step analytical logic (enumerate shocks → throughline → signal-vs-level → localise → bound confidence → open decision).
