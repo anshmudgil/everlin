@@ -1,71 +1,96 @@
-# Spec — Runtime cross-source verification agent (DRAFT for discussion)
+# Spec — Runtime cross-source verification (v2, against the real contract)
 
-**Status:** DRAFT — not approved, not scheduled. Separate from the RBA/ABS build.
-**Motivation:** The golden morning briefs verify by hand — "ASX 200 triple-confirmed via
-Investing.com, Trading Economics, MarketScreener"; figures that can't be independently
-confirmed are marked "NOT OBTAINED THIS RUN, DESPITE AN EXTENDED SEARCH". This spec makes
-that discipline a product capability instead of manual labour.
+**Status:** DRAFT for approval. Supersedes v1 (v1 was written before the calc/router/validate
+layer landed).
+**Decisions locked (2026-09-10):** deterministic route pass · tabular + narrative · "confirmed
+against the source's own multiple surfaces" is an acceptable tier for official statistics.
 
-## Goal
-Before any specific figure lands in a brief, cross-check it against ≥2 INDEPENDENT sources.
-Emit a confidence tier per figure. Never upgrade a single-source figure to "confirmed".
+## What changed since v1 (why this rewrite)
+The repo now has (uncommitted, not mine — do not clobber): `src/lib/everlin/{calc,schemas,validate,router}.ts`
+and an `api/everlin/` route. That layer already encodes provenance + a validation gate:
+- **`schemas.ts`** — a number is a `Figure` that MUST carry a `calcKey` or be `missing:true`.
+  A factual statement is a `Claim` with a required `source` + an `assertion` flag
+  (`assertion:true` = unverified promoter claim). Outputs pass a per-skill Zod gate.
+- **`calc.ts`** — computed numbers get a content-addressed `calcKey` (SHA of inputs).
+  **Computed figures are already deterministically verifiable — calcKey IS their proof.**
+- **`validate.ts`** — `validateOutput()` returns a discriminated `{ok:true|false, errors, lint}`
+  result "so an API route can surface violations to the caller (HITL)". This is the gate shape
+  cross-source verification must PLUG INTO, not duplicate.
 
-## The core idea (maps to the golden brief's own vocabulary)
-Each figure gets a **confirmation tier**:
-- `triple-confirmed` — ≥3 independent sources agree (within tolerance).
-- `confirmed` — 2 independent sources agree.
-- `single-source` — only the primary tool has it (state the source, don't over-claim).
-- `conflict` — sources disagree beyond tolerance → surface BOTH values + both sources.
-- `not-obtained` — no source → the existing E2 marker.
+**Consequence:** cross-source verification is only needed for the provenance types code can't
+already prove:
+- **Retrieved `Figure`s** (e.g. my RBA 4.35%, ABS CPI) — real, but "is this the right current
+  value?" is a retrieval question, not a math question.
+- **`Claim`s** (narrative, e.g. "August payrolls beat consensus") — `assertion` must be set
+  honestly; verification decides confirmed vs assertion.
+Computed figures (calcKey) are OUT — already proven.
 
-## Design options (pick one — this is the main open question)
-**Option 1 — verification as a tool the agent calls.**
-A `crossCheck(figure, value, sources[])` tool. Agent decides when to invoke. Simple, but the
-agent can skip it → weak guarantee. Cheap.
+## ⚠ Pre-existing gap this surfaced (flag, don't silently fix)
+`Figure` requires a `calcKey`. My retrieved Facts (cash rate, CPI) have `source`/`sourceUrl`
+but **no calcKey** → a retrieved figure currently can't pass `Figure` validation unless marked
+`missing`. Either (a) `Figure` needs a `source`-based provenance branch (retrieved ≠ computed),
+or (b) retrieved values must be marked `missing` with the value in `note` (ugly). This spec
+assumes we add a **retrieved-provenance branch to `Figure`** (a `source`+`asOf` alt to `calcKey`).
+Needs your ok — it edits someone else's uncommitted schema. **Open question Q0.**
 
-**Option 2 — a verification PASS in the route (deterministic).**
-After the analyst drafts, a second stage re-fetches each cited figure from alternate sources
-and stamps a tier. Stronger guarantee (can't be skipped), higher latency/cost. This is the
-"enterprise gate" shape — enforcement where it can't be routed around.
+## Architecture (locked: deterministic route pass)
+After the analyst drafts a structured output, before the gate passes it:
+1. For each `Figure` with retrieved provenance → **re-fetch from an alternate surface**, compare
+   within tolerance, stamp a `confirmation` tier.
+2. For each `Claim` → run the **narrative corroboration sub-agent** (web search, N independent
+   sources); set `assertion=false` + fill `source` if corroborated, else keep `assertion=true`.
+3. Fold results into the SAME `ValidationResult` shape (`validate.ts`) → a `conflict` tier is a
+   hard fail that routes to HITL, exactly like a lint failure does today.
 
-**Option 3 — a sub-agent (LangGraph/deep-agents) with its own source-fetch tools.**
-Most capable (can do open-web search per figure), most expensive + slowest. Overkill for
-tabular figures that have deterministic 2nd sources; right for narrative/qualitative claims.
+### Confirmation tiers (extend, don't reinvent)
+- `triple` / `confirmed` / `single-source` / `conflict` / `not-obtained`.
+- For official stats: "confirmed against the source's own multiple surfaces" (RBA CSV +
+  media-release + decisions page) counts as `confirmed`, **labelled honestly** — not "3
+  independent origins". (Your locked call.)
 
-Leaning **Option 2 for tabular figures** (deterministic, gate-shaped) + **Option 1** as an
-escape hatch for ad-hoc claims. Option 3 only if we need open-web corroboration.
+### Independent-surface fetchers (tabular)
+- Cash rate: RBA F1 CSV (primary, already built) vs RBA media-release page vs RBA decisions
+  index. All RBA-origin → tier caps at `confirmed`, never `triple`.
+- CPI/GDP: ABS primary vs ABS release page.
+- FX (future): RBA F11.1 vs an independent central-bank cross-rate → can reach `triple`.
 
-## Independent-source strategy (must be genuinely independent)
-- Cash rate: RBA F1 (primary) vs RBA media-release page vs Trading Economics — but note the
-  latter two may DERIVE from RBA, so they're not fully independent. Real independence is hard
-  for official statistics. Spec must be honest: "confirmed against RBA's own two surfaces" ≠
-  "3 independent origins".
-- FX: RBA F11.1 vs a central-bank cross-rate vs a market feed.
-- This nuance is WHY it needs its own spec — naive "3 sources" can be 3 mirrors of one origin.
+### Narrative corroboration (sub-agent, the bigger half)
+- A deep-research sub-agent per `Claim`: search N sources, return {corroborated:bool, sources[]}.
+- Cost/latency real → run only on `Claim`s in the final draft, in parallel, under `maxDuration`.
+- Never invents a corroborating source; absence ⇒ `assertion:true` stays.
 
-## Hard requirements (enterprise bar — per CLAUDE.md)
-- **Evals**: a fixture set of figures with known correct values + known conflicts; measure
-  precision/recall of the conflict detector. No shipping without this.
-- **HITL**: a `conflict` tier must be able to pause for human review before a brief publishes
-  (the "irreversible outward-facing action" gate — a brief goes to the IC).
-- **No fabrication**: verifier never invents a corroborating value; absence = single-source.
-- **Latency budget**: a brief cites ~20-40 figures; parallel verification must stay under the
-  route's maxDuration. Measure before claiming.
-- **Cost**: extra fetches per figure. Quantify vs the qwen-flash baseline.
+## Hard requirements (enterprise bar)
+- **Evals** (`eval-engineering`): fixture outputs with known-correct figures, known conflicts,
+  and known-unverifiable claims. Measure conflict-detector precision/recall. No ship without it.
+  There is already a `selftest.ts` — extend it, don't fork.
+- **HITL**: `conflict` tier pauses before a brief is filed/rendered (a brief goes to the IC —
+  outward-facing). Reuse the `validateOutput` → caller-surfaced path.
+- **No fabrication**: verifier never invents a corroborating value/source.
+- **Latency/cost**: a brief cites ~20-40 figures + claims; quantify the added fetch/search cost
+  vs the qwen-flash baseline BEFORE claiming it's shippable.
+- **Don't duplicate** `lintText` or the schema gate — compose with them.
 
-## Acceptance criteria (draft — refine on approval)
-1. Given a figure with 2 agreeing independent sources → tier `confirmed`, both cited. Live.
-2. Given a figure where sources disagree → tier `conflict`, BOTH values surfaced, HITL pause.
-3. Given a figure only the primary tool has → `single-source`, no false "confirmed".
-4. Eval set: conflict detector ≥ agreed precision/recall threshold (set on approval).
-5. End-to-end: a real brief run stamps every figure with a tier; verify by reading output.
+## Acceptance criteria (verify by real runs)
+1. Retrieved figure with 2 agreeing RBA surfaces → tier `confirmed`, both cited, honest label. Live.
+2. Figure where surfaces disagree beyond tolerance → `conflict`, BOTH values surfaced, HITL pause.
+3. Retrieved figure only the primary has → `single-source`, no false `confirmed`.
+4. A `Claim` corroborated by ≥2 independent web sources → `assertion:false` + sources; an
+   uncorroborated claim stays `assertion:true`. Live sub-agent run.
+5. Eval set (extends `selftest.ts`): conflict detector ≥ agreed precision/recall.
+6. Every path folds into `ValidationResult`; a conflict is a hard fail → HITL, no 500.
+7. typecheck + lint clean; no new dep unless justified; no secret.
 
 ## Open questions for approval
-- Q: Option 1 vs 2 vs 3 (or the hybrid)?
-- Q: Which figures in scope first — just cash rate + FX (deterministic), or narrative too?
-- Q: Is "confirmed against RBA's own multiple surfaces" acceptable, or do you require
-  genuinely independent origins (which for official stats may be impossible)?
-- Q: Build order — after the RBA/ABS tools land (they're the thing being verified), right?
+- **Q0 (blocking):** May I add a retrieved-provenance branch to `Figure` in `schemas.ts`
+  (source+asOf as an alternative to calcKey)? It edits uncommitted not-mine code. Without it,
+  retrieved facts can't cleanly pass the gate. Alternative: coordinate with whoever owns that
+  file first.
+- **Q1:** Build order — tabular figure-verification first (small, deterministic, reuses my
+  fetchers), narrative sub-agent second (big)? Or both at once?
+- **Q2:** Tolerance per figure type (cash rate exact; CPI index ±0.0; FX ±small bps)?
+- **Q3:** The calc/router layer is uncommitted and mid-flight. Do I build ON it (risking churn
+  under me again) or wait for it to be committed first?
 
 ## Dependency
-Blocked-by: RBA + ABS tools must exist first (nothing to verify until figures are retrieved).
+Blocked-by: the retrieved-figure tools (DONE, committed `c9ba0a1`) + a stable calc/schemas layer
+(currently uncommitted — see Q3).

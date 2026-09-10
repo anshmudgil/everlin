@@ -8,8 +8,9 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-serif);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -117,46 +118,83 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-/* ===== Everlin brand override — palette extracted from the morning-brief PDF.
-   Forest green primary, gold accent, cream ground. Swap for Assembly kit later. ===== */
+/* ===== Everlin brand system — palette extracted from the Morning Brief PDF.
+   LIGHT  = true white canvas (#ffffff) + near-black ink.
+   DARK   = deep forest (#12211a) ground.
+   BOTH   = forest-green sidebar (#163b2e), gold accent (#b8912f), forest primary.
+   Sidebar carries its own tokens so it stays green in both modes. ===== */
 :root {
-  --background: oklch(0.965 0.012 92);      /* cream */
-  --foreground: oklch(0.24 0.02 150);       /* forest ink */
-  --card: oklch(0.98 0.008 92);
-  --card-foreground: oklch(0.24 0.02 150);
-  --popover: oklch(0.98 0.008 92);
-  --popover-foreground: oklch(0.24 0.02 150);
-  --primary: oklch(0.32 0.045 158);         /* forest #14342A */
-  --primary-foreground: oklch(0.965 0.012 92);
-  --secondary: oklch(0.92 0.015 92);
-  --secondary-foreground: oklch(0.28 0.03 155);
-  --muted: oklch(0.92 0.012 92);
-  --muted-foreground: oklch(0.45 0.02 150);
-  --accent: oklch(0.68 0.075 75);           /* gold #B8925A */
-  --accent-foreground: oklch(0.2 0.03 80);
-  --border: oklch(0.86 0.015 90);
-  --input: oklch(0.86 0.015 90);
-  --ring: oklch(0.68 0.075 75);
+  /* LIGHT — true white ground, near-black ink */
+  --background: oklch(1 0 0);                 /* #ffffff */
+  --foreground: oklch(0.18 0.006 160);        /* near-black, faint forest tint */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.006 160);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.006 160);
+  --primary: oklch(0.36 0.055 158);           /* forest green #163b2e */
+  --primary-foreground: oklch(0.98 0.006 92);
+  --secondary: oklch(0.965 0.004 150);
+  --secondary-foreground: oklch(0.28 0.035 158);
+  --muted: oklch(0.965 0.004 150);
+  --muted-foreground: oklch(0.47 0.012 155);
+  --accent: oklch(0.66 0.11 82);              /* gold #b8912f */
+  --accent-foreground: oklch(0.22 0.03 82);
+  --destructive: oklch(0.52 0.19 27);         /* escalation red #b3261e */
+  --border: oklch(0.915 0.004 150);           /* hairline */
+  --input: oklch(0.915 0.004 150);
+  --ring: oklch(0.66 0.11 82);                /* gold focus */
   --radius: 0.6rem;
+
+  /* Sidebar — forest green in BOTH modes, cream ink, gold accent */
+  --sidebar: oklch(0.32 0.05 158);            /* forest #163b2e */
+  --sidebar-foreground: oklch(0.95 0.012 92); /* cream/white */
+  --sidebar-primary: oklch(0.66 0.11 82);
+  --sidebar-primary-foreground: oklch(0.2 0.03 82);
+  --sidebar-accent: oklch(0.66 0.11 82);      /* gold active state */
+  --sidebar-accent-foreground: oklch(0.2 0.03 82);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.66 0.11 82);
+
+  /* Escalation semantics (label-always, never colour alone) */
+  --escalation-green: oklch(0.52 0.11 150);   /* #1e7a3d */
+  --escalation-amber: oklch(0.66 0.11 82);    /* #b8912f gold */
+  --escalation-red: oklch(0.52 0.19 27);      /* #b3261e */
 }
+
 .dark {
-  --background: oklch(0.19 0.02 158);       /* deep forest */
-  --foreground: oklch(0.92 0.012 92);
-  --card: oklch(0.23 0.025 158);
-  --card-foreground: oklch(0.92 0.012 92);
-  --popover: oklch(0.23 0.025 158);
-  --popover-foreground: oklch(0.92 0.012 92);
-  --primary: oklch(0.68 0.075 75);          /* gold leads in dark */
-  --primary-foreground: oklch(0.16 0.02 158);
-  --secondary: oklch(0.27 0.03 158);
-  --secondary-foreground: oklch(0.92 0.012 92);
-  --muted: oklch(0.27 0.03 158);
-  --muted-foreground: oklch(0.7 0.02 120);
-  --accent: oklch(0.68 0.075 75);
-  --accent-foreground: oklch(0.16 0.02 158);
-  --border: oklch(0.32 0.03 158);
-  --input: oklch(0.32 0.03 158);
-  --ring: oklch(0.68 0.075 75);
+  /* DARK — deep forest ground #12211a */
+  --background: oklch(0.2 0.022 158);         /* deep forest #12211a */
+  --foreground: oklch(0.93 0.012 92);
+  --card: oklch(0.24 0.026 158);
+  --card-foreground: oklch(0.93 0.012 92);
+  --popover: oklch(0.24 0.026 158);
+  --popover-foreground: oklch(0.93 0.012 92);
+  --primary: oklch(0.55 0.075 158);           /* lifted forest so it reads on dark */
+  --primary-foreground: oklch(0.97 0.008 92);
+  --secondary: oklch(0.28 0.03 158);
+  --secondary-foreground: oklch(0.93 0.012 92);
+  --muted: oklch(0.28 0.03 158);
+  --muted-foreground: oklch(0.72 0.018 130);
+  --accent: oklch(0.68 0.11 82);              /* gold */
+  --accent-foreground: oklch(0.18 0.025 82);
+  --destructive: oklch(0.62 0.19 25);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.68 0.11 82);
+
+  /* Sidebar — slightly darker forest in dark mode */
+  --sidebar: oklch(0.27 0.042 158);           /* darker forest */
+  --sidebar-foreground: oklch(0.95 0.012 92);
+  --sidebar-primary: oklch(0.68 0.11 82);
+  --sidebar-primary-foreground: oklch(0.18 0.025 82);
+  --sidebar-accent: oklch(0.68 0.11 82);      /* gold */
+  --sidebar-accent-foreground: oklch(0.18 0.025 82);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.68 0.11 82);
+
+  --escalation-green: oklch(0.6 0.11 150);
+  --escalation-amber: oklch(0.68 0.11 82);
+  --escalation-red: oklch(0.62 0.19 25);
 }
 
 @layer base {
@@ -165,8 +203,29 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Tabular figures globally so numbers line up in tables + headers. */
+    font-feature-settings: "tnum" 1, "cv01" 1;
+    font-variant-numeric: tabular-nums;
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer utilities {
+  /* Opt-in tabular helper for isolated numeric runs. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+  /* Escalation badges — semantic colour with a text label ALWAYS. */
+  .escalation-green {
+    color: var(--escalation-green);
+  }
+  .escalation-amber {
+    color: var(--escalation-amber);
+  }
+  .escalation-red {
+    color: var(--escalation-red);
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
 import { useChat } from "@ai-sdk/react";
 import {
   Conversation,
@@ -38,26 +38,25 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { DownloadIcon, PencilIcon } from "lucide-react";
+import { DownloadIcon, PencilIcon, MenuIcon, XIcon } from "lucide-react";
+import { SessionList, SESSIONS } from "@/components/session-list";
+import { ThemeToggle } from "@/components/theme-toggle";
 
-const AGENTS = [
-  { id: "inv", short: "IA", name: "Investment Analyst", model: "Qwen3.7 Flash", status: "ready" },
-  { id: "prop", short: "PA", name: "Property Analyst", model: "Qwen3.7 Flash", status: "idle" },
-];
+// Kept for backwards-compat: some routes/imports still reference THREADS.
+export const THREADS = SESSIONS;
 
-export const THREADS = [
-  { id: "weekly-08sep", t: "Weekly IC brief — 08 Sep", m: "now · 1 AMBER" },
-  { id: "nvda-mediatek", t: "Nvidia / MediaTek convertible", m: "2h ago" },
-  { id: "aud-hedge", t: "AUD hedging window scan", m: "yesterday" },
-  { id: "pc-fund-ii", t: "Screening: private credit fund II", m: "Fri" },
-];
+// One assistant. Both tiers currently run the same model; the toggle flips the
+// POST body `mode` so the route can re-split to premium models later.
+const ANALYST = { short: "EA", name: "Everlin Analyst" };
 
 // The agent's generated brief becomes an artifact in the canvas. Here it is detected
 // from a data part the agent stream can emit (data-artifact); until the model emits one,
 // the canvas shows the empty/awaiting state. This is the streaming-artifact seam.
 type BriefArtifact = { title: string; ref: string; body: string };
 
-function extractArtifact(messages: ReturnType<typeof useChat>["messages"]): BriefArtifact | null {
+function extractArtifact(
+  messages: ReturnType<typeof useChat>["messages"],
+): BriefArtifact | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     for (const part of messages[i].parts) {
       // AI SDK data parts arrive as type `data-<name>`; the route can stream `data-artifact`.
@@ -69,15 +68,49 @@ function extractArtifact(messages: ReturnType<typeof useChat>["messages"]): Brie
   return null;
 }
 
+function SidebarBrand() {
+  return (
+    <div className="px-6 py-5">
+      <div className="font-serif text-lg font-bold tracking-wide text-sidebar-foreground">
+        EVERLIN
+      </div>
+      <div className="text-xs italic text-[var(--sidebar-accent)]">
+        Enduring Legacy
+      </div>
+    </div>
+  );
+}
+
+function SidebarFooter() {
+  return (
+    <div className="flex items-center justify-between gap-2 border-t border-white/10 px-4 py-3">
+      <div className="text-xs">
+        <span className="block font-semibold text-sidebar-foreground">Jordan</span>
+        <span className="text-sidebar-foreground/60">Principal · IC</span>
+      </div>
+      <ThemeToggle />
+    </div>
+  );
+}
+
+function SidebarInner({ threadId }: { threadId: string }) {
+  return (
+    <>
+      <SidebarBrand />
+      <SessionList activeId={threadId} />
+      <SidebarFooter />
+    </>
+  );
+}
+
 export function EverlinWorkspace({ threadId }: { threadId: string }) {
-  const [agent, setAgent] = useState("inv");
   const [icGrade, setIcGrade] = useState(false);
+  const [mobileNav, setMobileNav] = useState(false);
   // key useChat by thread so switching threads is a distinct conversation
   const { messages, sendMessage, status } = useChat({ id: threadId });
 
-  const activeAgent = AGENTS.find((a) => a.id === agent);
   const artifact = extractArtifact(messages);
-  const thread = THREADS.find((x) => x.id === threadId);
+  const session = SESSIONS.find((x) => x.id === threadId);
 
   const onSubmit = (msg: PromptInputMessage) => {
     if (!msg.text?.trim()) return;
@@ -85,67 +118,71 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
   };
 
   return (
-    <div className="grid h-dvh grid-cols-[236px_minmax(420px,1fr)_minmax(380px,0.95fr)] max-lg:grid-cols-[236px_1fr] max-md:grid-cols-1 bg-background text-foreground">
-      {/* RAIL — lighter, chat-first */}
-      <aside className="flex flex-col border-r bg-primary text-primary-foreground min-h-0 max-md:hidden">
-        <div className="px-6 py-5">
-          <div className="font-heading text-lg font-bold tracking-wide">EVERLIN</div>
-          <div className="text-xs italic text-accent">Enduring Legacy</div>
-        </div>
-        <div className="px-4 pb-3 flex flex-col gap-1">
-          {AGENTS.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => setAgent(a.id)}
-              className={`flex items-center gap-3 rounded-lg px-2.5 py-2 min-h-11 text-left transition ${
-                agent === a.id ? "bg-black/20" : "hover:bg-white/5 opacity-80"
-              }`}
-            >
-              <span className="flex size-7 items-center justify-center rounded-md bg-accent font-heading text-xs font-bold text-accent-foreground">
-                {a.short}
-              </span>
-              <span className="leading-tight">
-                <span className="block text-[13px]">{a.name}</span>
-                <span className="text-[10px] text-accent">
-                  {a.status === "ready" ? "● ready" : "idle"} · {a.model}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="flex-1 overflow-y-auto px-3 pt-2 min-h-0 border-t border-white/10">
-          <div className="px-2 py-2 text-[10px] uppercase tracking-widest opacity-50">Threads</div>
-          {THREADS.map((th) => (
-            <Link
-              key={th.id}
-              href={`/t/${th.id}`}
-              className={`flex w-full flex-col rounded-md px-3 py-2 min-h-10 ${
-                th.id === threadId ? "bg-black/20" : "hover:bg-white/5"
-              }`}
-            >
-              <span className="text-[13px] leading-tight">{th.t}</span>
-              <span className="text-[10px] opacity-50">{th.m}</span>
-            </Link>
-          ))}
-        </div>
-        <div className="border-t border-white/10 px-6 py-3 text-xs text-accent">
-          <span className="block font-semibold text-primary-foreground">Jordan</span>
-          Principal · IC
-        </div>
+    <div className="grid h-dvh grid-cols-[248px_minmax(420px,1fr)_minmax(380px,0.95fr)] max-lg:grid-cols-[248px_1fr] max-md:grid-cols-1 bg-background text-foreground">
+      {/* RAIL — sessions, forest green, gold active states */}
+      <aside className="flex min-h-0 flex-col border-r border-black/10 bg-sidebar text-sidebar-foreground max-md:hidden">
+        <SidebarInner threadId={threadId} />
       </aside>
 
-      {/* CONVERSATION — the hero */}
-      <section className="flex flex-col min-h-0 border-r bg-background">
-        <header className="flex items-center gap-3 border-b px-5 py-3">
-          <span className="flex size-6 items-center justify-center rounded-md bg-accent font-heading text-[11px] font-bold text-accent-foreground">
-            {activeAgent?.short}
+      {/* MOBILE off-canvas sidebar — transform-only slide, GPU compositor */}
+      <AnimatePresence>
+        {mobileNav && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setMobileNav(false)}
+              style={{ willChange: "opacity" }}
+            />
+            <motion.aside
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", stiffness: 400, damping: 40 }}
+              className="absolute inset-y-0 left-0 flex w-[260px] flex-col bg-sidebar text-sidebar-foreground shadow-xl"
+              style={{ willChange: "transform" }}
+            >
+              <button
+                onClick={() => setMobileNav(false)}
+                aria-label="Close navigation"
+                className="absolute right-3 top-4 flex size-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-white/10"
+              >
+                <XIcon className="size-4" />
+              </button>
+              <SidebarInner threadId={threadId} />
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CONVERSATION — the hero, one chatbot */}
+      <section className="flex min-h-0 flex-col border-r border-border bg-background">
+        <header className="flex items-center gap-3 border-b border-border px-5 py-3">
+          <button
+            onClick={() => setMobileNav(true)}
+            aria-label="Open navigation"
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:hidden"
+          >
+            <MenuIcon className="size-4" />
+          </button>
+          <span className="flex size-6 items-center justify-center rounded-md bg-primary font-serif text-[11px] font-bold text-primary-foreground">
+            {ANALYST.short}
           </span>
-          <span className="font-heading text-[15px] font-semibold">{activeAgent?.name}</span>
-          {thread && <span className="text-xs text-muted-foreground">· {thread.t}</span>}
+          <span className="font-serif text-[15px] font-semibold">{ANALYST.name}</span>
+          {session && (
+            <span className="truncate text-xs text-muted-foreground max-sm:hidden">
+              · {session.t}
+            </span>
+          )}
           <button
             onClick={() => setIcGrade((v) => !v)}
-            className={`ml-auto rounded-md border px-2.5 py-1 font-mono text-[10px] ${
-              icGrade ? "border-accent bg-accent text-accent-foreground" : "text-muted-foreground"
+            className={`ml-auto rounded-md border px-2.5 py-1 font-mono text-[10px] tracking-wide transition-colors ${
+              icGrade
+                ? "border-accent bg-accent text-accent-foreground"
+                : "border-border text-muted-foreground hover:text-foreground"
             }`}
             title="IC-grade vs routine tier (both on Qwen3.7 Flash for now; re-split to premium models later)"
           >
@@ -153,57 +190,74 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
           </button>
         </header>
 
-        <Conversation className="flex-1 min-h-0">
+        <Conversation className="min-h-0 flex-1">
           <ConversationContent className="mx-auto w-full max-w-2xl">
             {messages.length === 0 && (
               <ConversationEmptyState
-                title="Brief the Investment Analyst"
+                title="Brief the Everlin Analyst"
                 description="Ask for this week's IC brief, a screening lean, or challenge a call. Every figure is sourced or marked not-obtained."
               />
             )}
             {messages.map((message) => (
-              <Message from={message.role} key={message.id}>
-                <MessageContent>
-                  {message.parts.map((part, i) => {
-                    if (part.type === "text") {
-                      return (
-                        <MessageResponse key={`${message.id}-${i}`}>{part.text}</MessageResponse>
-                      );
-                    }
-                    // tool calls render as a collapsible "retrieving…" panel — the
-                    // visible signal that a figure came from a real source, not memory.
-                    if (part.type.startsWith("tool-")) {
-                      const p = part as {
-                        type: `tool-${string}`;
-                        state: "input-streaming" | "input-available" | "output-available" | "output-error";
-                        input?: unknown;
-                        output?: unknown;
-                        errorText?: string;
-                      };
-                      return (
-                        <Tool key={`${message.id}-${i}`}>
-                          <ToolHeader type={p.type as `tool-${string}`} state={p.state} />
-                          <ToolContent>
-                            <ToolInput input={p.input} />
-                            <ToolOutput output={p.output as React.ReactNode} errorText={p.errorText} />
-                          </ToolContent>
-                        </Tool>
-                      );
-                    }
-                    return null;
-                  })}
-                </MessageContent>
-              </Message>
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                style={{ willChange: "transform, opacity" }}
+              >
+                <Message from={message.role}>
+                  <MessageContent>
+                    {message.parts.map((part, i) => {
+                      if (part.type === "text") {
+                        return (
+                          <MessageResponse key={`${message.id}-${i}`}>
+                            {part.text}
+                          </MessageResponse>
+                        );
+                      }
+                      // tool calls render as a collapsible "retrieving…" panel — the
+                      // visible signal that a figure came from a real source, not memory.
+                      if (part.type.startsWith("tool-")) {
+                        const p = part as {
+                          type: `tool-${string}`;
+                          state:
+                            | "input-streaming"
+                            | "input-available"
+                            | "output-available"
+                            | "output-error";
+                          input?: unknown;
+                          output?: unknown;
+                          errorText?: string;
+                        };
+                        return (
+                          <Tool key={`${message.id}-${i}`}>
+                            <ToolHeader type={p.type as `tool-${string}`} state={p.state} />
+                            <ToolContent>
+                              <ToolInput input={p.input} />
+                              <ToolOutput
+                                output={p.output as React.ReactNode}
+                                errorText={p.errorText}
+                              />
+                            </ToolContent>
+                          </Tool>
+                        );
+                      }
+                      return null;
+                    })}
+                  </MessageContent>
+                </Message>
+              </motion.div>
             ))}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
 
-        <div className="border-t p-4">
+        <div className="border-t border-border p-4">
           <div className="mx-auto w-full max-w-2xl">
             <PromptInput onSubmit={onSubmit}>
               <PromptInputBody>
-                <PromptInputTextarea placeholder="Reply to the Investment Analyst… (⏎ send, ⇧⏎ newline)" />
+                <PromptInputTextarea placeholder="Reply to the Everlin Analyst… (⏎ send, ⇧⏎ newline)" />
               </PromptInputBody>
               <PromptInputFooter>
                 <span className="px-1 text-[11px] text-muted-foreground">
@@ -217,12 +271,16 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
       </section>
 
       {/* ARTIFACT CANVAS — streams the agent's brief when emitted */}
-      <section className="flex flex-col min-h-0 bg-card max-lg:hidden">
+      <section className="flex min-h-0 flex-col bg-card max-lg:hidden">
         <Artifact className="flex h-full flex-col rounded-none border-0">
           <ArtifactHeader>
             <div>
-              <ArtifactTitle>{artifact?.title ?? "Weekly IC Briefing"}</ArtifactTitle>
-              <ArtifactDescription>{artifact?.ref ?? "EVL-WEEKLY-08092026"}</ArtifactDescription>
+              <ArtifactTitle className="font-serif">
+                {artifact?.title ?? "Weekly IC Briefing"}
+              </ArtifactTitle>
+              <ArtifactDescription className="font-mono tabular-nums">
+                {artifact?.ref ?? "EVL-WEEKLY-08092026"}
+              </ArtifactDescription>
             </div>
             <ArtifactActions>
               <ArtifactAction icon={PencilIcon} tooltip="Edit" label="Edit" />
@@ -234,11 +292,11 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
               <MessageResponse>{artifact.body}</MessageResponse>
             ) : (
               <div className="text-sm text-muted-foreground">
-                <p className="font-heading text-base font-semibold text-foreground">
+                <p className="font-serif text-base font-semibold text-foreground">
                   No artifact yet.
                 </p>
                 <p className="mt-2">
-                  Ask the agent to build the weekly brief. When it produces a structured
+                  Ask the analyst to build the weekly brief. When it produces a structured
                   document, it streams into this canvas — every figure sourced or marked
                   not-obtained, never estimated.
                 </p>
