@@ -65,6 +65,7 @@ import {
   DownloadIcon,
   PencilIcon,
   FileTextIcon,
+  SearchIcon,
   MenuIcon,
   XIcon,
   PanelRightIcon,
@@ -300,6 +301,23 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
   const [canvasManuallyOpen, setCanvasManuallyOpen] = useState(false);
   // Canvas view mode: the styled HTML document, or the rendered deterministic PDF.
   const [canvasView, setCanvasView] = useState<"html" | "pdf">("html");
+  // Research panel (feature branch): deep-research over the brief's licensed gaps.
+  type ResearchRow = { label: string; value: number | null; provenance: string; clientEligible: boolean; tier: string };
+  const [research, setResearch] = useState<ResearchRow[] | null>(null);
+  const [researching, setResearching] = useState(false);
+  const runResearch = useCallback(async () => {
+    setResearching(true);
+    try {
+      const asOf = new Date().toISOString().slice(0, 10);
+      const res = await fetch(`/api/everlin/research?asOf=${asOf}&allowInternal=1`);
+      const data = await res.json();
+      setResearch(data.results ?? []);
+    } catch {
+      setResearch([]);
+    } finally {
+      setResearching(false);
+    }
+  }, []);
   // key useChat by thread so switching threads is a distinct conversation
   const { messages, sendMessage, status } = useChat({ id: threadId });
 
@@ -561,6 +579,13 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
                 </div>
                 <ArtifactActions>
                   <ArtifactAction icon={PencilIcon} tooltip="Edit" label="Edit" />
+                  {/* Deep-research the brief's licensed gaps (internal-only findings). */}
+                  <ArtifactAction
+                    icon={SearchIcon}
+                    tooltip="Research gaps (internal)"
+                    label="Research gaps"
+                    onClick={runResearch}
+                  />
                   {/* Toggle the styled HTML view vs the rendered deterministic PDF. */}
                   <ArtifactAction
                     icon={FileTextIcon}
@@ -584,6 +609,46 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
                   />
                 </ArtifactActions>
               </ArtifactHeader>
+              {/* Research findings panel (feature branch) — internal-only, gated. */}
+              {(researching || research) && (
+                <div className="border-b border-border bg-muted/30 px-4 py-3 text-xs">
+                  <div className="mb-1 font-semibold text-foreground">
+                    Gap research {researching ? "(running…)" : "(internal-only)"}
+                  </div>
+                  {research?.length ? (
+                    <table className="w-full tabular-nums">
+                      <tbody>
+                        {research.map((r) => (
+                          <tr key={r.label} className="border-b border-border/50 last:border-0">
+                            <td className="py-1 pr-2">{r.label}</td>
+                            <td className="py-1 pr-2 text-right">{r.value ?? "not obtained"}</td>
+                            <td className="py-1">
+                              <span
+                                className={
+                                  r.clientEligible
+                                    ? "rounded bg-green-600/15 px-1.5 py-0.5 text-green-700"
+                                    : r.value !== null
+                                      ? "rounded bg-amber-600/15 px-1.5 py-0.5 text-amber-700"
+                                      : "rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
+                                }
+                              >
+                                {r.clientEligible ? "client-clean" : r.value !== null ? "internal-only" : r.tier}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : researching ? (
+                    <div className="text-muted-foreground">Searching sources + cross-verifying…</div>
+                  ) : (
+                    <div className="text-muted-foreground">No candidates found.</div>
+                  )}
+                  <div className="mt-2 text-[10px] text-muted-foreground">
+                    Amber = licensed IP, blocked from a client brief without an authorised override.
+                  </div>
+                </div>
+              )}
               <ArtifactContent className="flex-1 overflow-y-auto scroll-smooth">
                 {artifact ? (
                   canvasView === "pdf" ? (
