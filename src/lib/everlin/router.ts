@@ -117,10 +117,15 @@ function scoreSkill(queryL: string, sd: SkillDef): { score: number; matched: str
   return { score, matched };
 }
 
-export function route(query: string, threshold = 2, maxSteps = 4): Plan {
+export function route(
+  query: string,
+  threshold = 2,
+  maxSteps = 4,
+  registry: Record<string, SkillDef> = SKILLS,
+): Plan {
   const q = query.toLowerCase();
   const steps: Step[] = [];
-  for (const sd of Object.values(SKILLS)) {
+  for (const sd of Object.values(registry)) {
     const { score, matched } = scoreSkill(q, sd);
     if (score >= threshold) steps.push({ skillId: sd.id, stage: sd.stage, score, matched, tools: sd.tools, note: sd.note });
   }
