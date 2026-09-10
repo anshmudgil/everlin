@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useChat } from "@ai-sdk/react";
 import {
@@ -38,12 +38,30 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { DownloadIcon, PencilIcon, MenuIcon, XIcon } from "lucide-react";
+import { DownloadIcon, PencilIcon, MenuIcon, XIcon, PanelRightIcon } from "lucide-react";
 import { SessionList, SESSIONS } from "@/components/session-list";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+// Per-thread artifact cache (module-scoped, survives thread switches within a session).
+// Keyed by threadId so switching away and back re-shows a brief that already streamed.
+const artifactCache = new Map<string, BriefArtifact>();
+
+// localStorage keys for persisted UI prefs (read in an effect, never at render → no
+// hydration mismatch). See docs/specs/ui-canvas-increment.md risk note.
+const LS_CANVAS = "everlin.canvasOpen";
+const LS_TIER = "everlin.icGrade";
+
 // Kept for backwards-compat: some routes/imports still reference THREADS.
 export const THREADS = SESSIONS;
+
+// Minimal HTML escape for values interpolated into the print window.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 // One assistant. Both tiers currently run the same model; the toggle flips the
 // POST body `mode` so the route can re-split to premium models later.
@@ -106,19 +124,112 @@ function SidebarInner({ threadId }: { threadId: string }) {
 export function EverlinWorkspace({ threadId }: { threadId: string }) {
   const [icGrade, setIcGrade] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  // Manual canvas toggle. Default closed; hydrated from localStorage in an effect
+  // (render-time localStorage would diverge server/client → hydration mismatch).
+  const [canvasManuallyOpen, setCanvasManuallyOpen] = useState(false);
   // key useChat by thread so switching threads is a distinct conversation
   const { messages, sendMessage, status } = useChat({ id: threadId });
 
-  const artifact = extractArtifact(messages);
+  // Live artifact from the stream, else the cached one for this thread. The cache is a
+  // module-scoped Map; writing the freshly-streamed artifact to it during render is
+  // idempotent (same key/value), so no effect + setState is needed — the derived value
+  // is read straight back, and a thread switch reads that thread's cached entry.
+  const streamed = extractArtifact(messages);
+  if (streamed) artifactCache.set(threadId, streamed);
+  const artifact = streamed ?? artifactCache.get(threadId) ?? null;
+
+  // Hydrate persisted prefs after mount via useSyncExternalStore-style read. We keep the
+  // SSR/first-client render at the defaults (false) to avoid a hydration mismatch, then
+  // apply the stored values on the mount commit through a ref-guarded one-time flip.
+  // (Reading localStorage at render or in a plain effect-setState both trip lint/hydration;
+  // a mount-only microtask keeps SSR output stable and the render tree honest.)
+  const hydratedPrefs = useRef(false);
+  useEffect(() => {
+    if (hydratedPrefs.current) return;
+    hydratedPrefs.current = true;
+    let canvas = false;
+    let tier = false;
+    try {
+      canvas = localStorage.getItem(LS_CANVAS) === "1";
+      tier = localStorage.getItem(LS_TIER) === "1";
+    } catch {}
+    // Schedule the state application in a microtask so it lands after the commit,
+    // not synchronously inside the effect body (avoids the cascading-render lint).
+    queueMicrotask(() => {
+      if (canvas) setCanvasManuallyOpen(true);
+      if (tier) setIcGrade(true);
+    });
+  }, []);
+
   const session = SESSIONS.find((x) => x.id === threadId);
+  const streaming = status !== "ready" && status !== "error";
+
+  // Canvas is open when a brief exists OR the user opened it manually.
+  const canvasOpen = !!artifact || canvasManuallyOpen;
+
+  const toggleCanvas = useCallback(() => {
+    setCanvasManuallyOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(LS_CANVAS, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const toggleTier = useCallback(() => {
+    setIcGrade((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(LS_TIER, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }, []);
 
   const onSubmit = (msg: PromptInputMessage) => {
     if (!msg.text?.trim()) return;
     sendMessage({ text: msg.text }, { body: { mode: icGrade ? "ic" : "routine" } });
   };
 
+  // Export the brief as a real PDF via the browser's print pipeline (no extra dep):
+  // open a clean print window with the doc's rendered HTML + Inter, and invoke print,
+  // where the user picks "Save as PDF". The window auto-closes after printing.
+  const docRef = useRef<HTMLDivElement>(null);
+  const handleExportPdf = useCallback(() => {
+    const node = docRef.current;
+    if (!node || !artifact) return;
+    const w = window.open("", "_blank", "width=820,height=1060");
+    if (!w) return;
+    w.document.write(
+      `<!doctype html><html><head><meta charset="utf-8"><title>${artifact.ref} — ${artifact.title}</title>` +
+        `<style>@page{margin:24mm 18mm}` +
+        `body{font-family:Inter,system-ui,sans-serif;color:#111;line-height:1.55;font-size:12pt}` +
+        `h1{font-size:18pt;margin:0 0 4pt}h2{font-size:13pt;margin:16pt 0 4pt}` +
+        `.docid{font-size:9pt;color:#666;margin-bottom:16pt}` +
+        `.tabular{font-variant-numeric:tabular-nums}</style></head><body>` +
+        `<h1>${escapeHtml(artifact.title)}</h1>` +
+        `<div class="docid">${escapeHtml(artifact.ref)}</div>` +
+        node.innerHTML +
+        `</body></html>`,
+    );
+    w.document.close();
+    w.focus();
+    // give the new document a tick to lay out, then print
+    w.setTimeout(() => {
+      w.print();
+      w.close();
+    }, 250);
+  }, [artifact]);
+
   return (
-    <div className="grid h-dvh grid-cols-[248px_minmax(420px,1fr)_minmax(380px,0.95fr)] max-lg:grid-cols-[248px_1fr] max-md:grid-cols-1 bg-background text-foreground">
+    <div
+      className={`grid h-dvh max-md:grid-cols-1 bg-background text-foreground transition-[grid-template-columns] duration-300 ease-out ${
+        canvasOpen
+          ? "grid-cols-[248px_minmax(420px,1fr)_minmax(380px,0.95fr)] max-lg:grid-cols-[248px_1fr]"
+          : "grid-cols-[248px_1fr]"
+      }`}
+    >
       {/* RAIL — sessions, forest green, gold active states */}
       <aside className="flex min-h-0 flex-col border-r border-black/10 bg-sidebar text-sidebar-foreground max-md:hidden">
         <SidebarInner threadId={threadId} />
@@ -168,18 +279,18 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
           >
             <MenuIcon className="size-4" />
           </button>
-          <span className="flex size-6 items-center justify-center rounded-md bg-primary font-serif text-[11px] font-bold text-primary-foreground">
+          <span className="flex size-6 items-center justify-center rounded-md bg-primary text-[11px] font-bold text-primary-foreground">
             {ANALYST.short}
           </span>
-          <span className="font-serif text-[15px] font-semibold">{ANALYST.name}</span>
+          <span className="text-[15px] font-semibold">{ANALYST.name}</span>
           {session && (
             <span className="truncate text-xs text-muted-foreground max-sm:hidden">
               · {session.t}
             </span>
           )}
           <button
-            onClick={() => setIcGrade((v) => !v)}
-            className={`ml-auto rounded-md border px-2.5 py-1 font-mono text-[10px] tracking-wide transition-colors ${
+            onClick={toggleTier}
+            className={`ml-auto rounded-md border px-2.5 py-1 text-[10px] tracking-wide transition-colors ${
               icGrade
                 ? "border-accent bg-accent text-accent-foreground"
                 : "border-border text-muted-foreground hover:text-foreground"
@@ -187,6 +298,18 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
             title="IC-grade vs routine tier (both on Qwen3.7 Flash for now; re-split to premium models later)"
           >
             {icGrade ? "IC-GRADE" : "ROUTINE"}
+          </button>
+          <button
+            onClick={toggleCanvas}
+            aria-pressed={canvasManuallyOpen}
+            className={`flex size-8 items-center justify-center rounded-md border transition-colors max-md:hidden ${
+              canvasOpen
+                ? "border-accent text-accent"
+                : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+            title={canvasOpen ? "Hide brief canvas" : "Show brief canvas"}
+          >
+            <PanelRightIcon className="size-4" />
           </button>
         </header>
 
@@ -270,41 +393,75 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
         </div>
       </section>
 
-      {/* ARTIFACT CANVAS — streams the agent's brief when emitted */}
-      <section className="flex min-h-0 flex-col bg-card max-lg:hidden">
-        <Artifact className="flex h-full flex-col rounded-none border-0">
-          <ArtifactHeader>
-            <div>
-              <ArtifactTitle className="font-serif">
-                {artifact?.title ?? "Weekly IC Briefing"}
-              </ArtifactTitle>
-              <ArtifactDescription className="font-mono tabular-nums">
-                {artifact?.ref ?? "EVL-WEEKLY-08092026"}
-              </ArtifactDescription>
-            </div>
-            <ArtifactActions>
-              <ArtifactAction icon={PencilIcon} tooltip="Edit" label="Edit" />
-              <ArtifactAction icon={DownloadIcon} tooltip="Export PDF" label="Export PDF" />
-            </ArtifactActions>
-          </ArtifactHeader>
-          <ArtifactContent className="flex-1 overflow-y-auto">
-            {artifact ? (
-              <MessageResponse>{artifact.body}</MessageResponse>
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                <p className="font-serif text-base font-semibold text-foreground">
-                  No artifact yet.
-                </p>
-                <p className="mt-2">
-                  Ask the analyst to build the weekly brief. When it produces a structured
-                  document, it streams into this canvas — every figure sourced or marked
-                  not-obtained, never estimated.
-                </p>
-              </div>
-            )}
-          </ArtifactContent>
-        </Artifact>
-      </section>
+      {/* ARTIFACT CANVAS — hidden until a brief streams in or the user opens it. */}
+      <AnimatePresence initial={false}>
+        {canvasOpen && (
+          <motion.section
+            key="canvas"
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 24 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            style={{ willChange: "transform, opacity" }}
+            className="flex min-h-0 flex-col border-l border-border bg-card max-lg:hidden"
+          >
+            <Artifact className="flex h-full flex-col rounded-none border-0">
+              <ArtifactHeader>
+                <div className="min-w-0">
+                  <ArtifactTitle className="flex items-center gap-2">
+                    {artifact?.title ?? "Weekly IC Briefing"}
+                    {streaming && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-normal text-accent">
+                        <span className="size-1.5 animate-pulse rounded-full bg-accent" />
+                        streaming
+                      </span>
+                    )}
+                  </ArtifactTitle>
+                  <ArtifactDescription className="tabular-nums">
+                    {artifact?.ref ?? "EVL-WEEKLY-08092026"}
+                  </ArtifactDescription>
+                </div>
+                <ArtifactActions>
+                  <ArtifactAction icon={PencilIcon} tooltip="Edit" label="Edit" />
+                  <ArtifactAction
+                    icon={DownloadIcon}
+                    tooltip="Export PDF"
+                    label="Export PDF"
+                    onClick={handleExportPdf}
+                    disabled={!artifact}
+                  />
+                  <ArtifactAction
+                    icon={XIcon}
+                    tooltip="Hide canvas"
+                    label="Hide canvas"
+                    onClick={toggleCanvas}
+                  />
+                </ArtifactActions>
+              </ArtifactHeader>
+              <ArtifactContent className="flex-1 overflow-y-auto scroll-smooth">
+                {artifact ? (
+                  // Styled, scrollable document view. Print target for Export-PDF.
+                  <article
+                    ref={docRef}
+                    className="mx-auto max-w-prose leading-relaxed [&_h1]:mt-0 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-6 [&_h2]:text-base [&_h2]:font-semibold [&_p]:my-3 [&_.tabular]:tabular-nums"
+                  >
+                    <MessageResponse>{artifact.body}</MessageResponse>
+                  </article>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    <p className="text-base font-semibold text-foreground">No artifact yet.</p>
+                    <p className="mt-2">
+                      Ask the analyst to build the weekly brief. When it produces a structured
+                      document, it streams into this canvas — every figure sourced or marked
+                      not-obtained, never estimated.
+                    </p>
+                  </div>
+                )}
+              </ArtifactContent>
+            </Artifact>
+          </motion.section>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

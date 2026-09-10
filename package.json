@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.96",
+    "@langchain/core": "1.2.9",
+    "@langchain/langgraph": "1.4.14",
     "@radix-ui/react-use-controllable-state": "^1.2.6",
     "@rive-app/react-webgl2": "^4.34.1",
     "@streamdown/cjk": "^1.0.3",

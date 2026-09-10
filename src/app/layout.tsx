@@ -1,29 +1,15 @@
 import type { Metadata } from "next";
-import { Inter, Fraunces, IBM_Plex_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-// Inter is the workhorse for all UI + data. tabular-nums is applied globally in
-// globals.css so numbers line up in tables and headers.
+// Inter is the single typeface across the whole app — UI, data, brief titles, doc-ids.
+// One family, no serif/mono split. tabular-nums (globals.css) keeps figures aligned.
 const sans = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-});
-
-// Serif is used for BRIEF TITLES ONLY (artifact titles, big headings).
-const serif = Fraunces({
-  variable: "--font-serif",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-// Mono for doc-ids / calc-keys.
-const mono = IBM_Plex_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -36,7 +22,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${sans.variable} ${serif.variable} ${mono.variable} h-full antialiased`}
+      className={`${sans.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <ThemeProvider

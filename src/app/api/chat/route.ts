@@ -4,8 +4,10 @@ import {
   stepCountIs,
   UIMessage,
   convertToModelMessages,
+  createUIMessageStream,
   createUIMessageStreamResponse,
   toUIMessageStream,
+  type UIMessageStreamWriter,
 } from "ai";
 import { z } from "zod";
 import { edgarConcept, treasuryYield, auCashRate, absSeries } from "@/lib/data-sources";
@@ -18,6 +20,8 @@ import {
   feasibilityStress,
   goingConcernYield,
 } from "@/lib/everlin/calc";
+import { buildDailyBrief } from "@/lib/everlin/brief-graph";
+import type { MorningBrief } from "@/lib/everlin/schemas";
 
 export const maxDuration = 60;
 
@@ -58,7 +62,80 @@ SKILL ROUTING: For any non-trivial request, first call planSkills with the user'
 
 DETERMINISTIC CALC RULE (critical, extends the retrieval rule): You must NEVER do financial arithmetic yourself. To state a margin of safety, fee load, development margin, feasibility-stress result, or going-concern yield, call the matching calc tool and cite the returned calcKey inline (e.g. "all-in fee 5.00% p.a. *(calc key: FEE_DECOMP-…)*"). The calc tools also return flags (e.g. fee load above the 2.5% ceiling) — surface every flag. A number without a calcKey or a retrieval source is a failed output.`;
 
-const tools = {
+// Data part carried to the client. The workspace client's extractArtifact()
+// reads a stream part of type "data-artifact" with this exact shape and opens
+// the canvas when one arrives.
+type ArtifactData = { title: string; ref: string; body: string };
+export type EverlinUIMessage = UIMessage<never, { artifact: ArtifactData }>;
+
+/** Render a validated MorningBrief into readable markdown for the canvas body. */
+function renderBriefMarkdown(brief: MorningBrief): string {
+  const lines: string[] = [];
+  lines.push(brief.executiveSummary.trim());
+  lines.push("");
+  lines.push("## Figures");
+  for (const f of brief.figures) {
+    if (f.missing || f.value === null) {
+      lines.push(`- ${f.label}: not obtained${f.note ? ` — ${f.note}` : ""}`);
+      continue;
+    }
+    const unit = f.unit ? ` ${f.unit}` : "";
+    const prov = f.source ?? f.calcKey ?? "unsourced";
+    lines.push(`- ${f.label}: ${f.value}${unit} [${prov}]`);
+  }
+  lines.push("");
+  lines.push("## Question for the IC");
+  lines.push(brief.questionForIC.trim());
+  lines.push("");
+  lines.push("---");
+  lines.push(brief.disclaimer.trim());
+  return lines.join("\n");
+}
+
+// Tools are built per-request so `generateDailyBrief` can capture the stream
+// writer and emit a `data-artifact` part (a tool's execute return is tool
+// output, NOT a data part — the part must go through writer.write).
+function makeTools(writer: UIMessageStreamWriter<EverlinUIMessage>) {
+  return {
+  generateDailyBrief: tool({
+    description:
+      "Generate today's Everlin Daily Brief (validated MorningBrief: RBA cash rate, executive summary, question for the IC) and open it in the canvas. Call this whenever the user asks for the daily brief / morning brief.",
+    inputSchema: z.object({
+      asOf: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional()
+        .describe("As-of date YYYY-MM-DD. Defaults to a recent valid date if omitted."),
+    }),
+    execute: async ({ asOf }) => {
+      // The request does not cleanly carry the wall-clock date to a tool, so
+      // default to a hardcoded recent valid date when the model omits asOf.
+      const DEFAULT_AS_OF = "2026-09-10";
+      const asOfDate = asOf ?? DEFAULT_AS_OF;
+      const result = await buildDailyBrief(asOfDate);
+      if (!result.ok || !result.brief) {
+        return {
+          ok: false as const,
+          asOf: asOfDate,
+          errors: result.errors ?? ["brief build failed"],
+        };
+      }
+      const brief = result.brief as MorningBrief;
+      const artifact: ArtifactData = {
+        title: "Daily Brief",
+        ref: brief.envelope.docId,
+        body: renderBriefMarkdown(brief),
+      };
+      // Emit the data-artifact part so the client canvas renders the brief.
+      writer.write({ type: "data-artifact", data: artifact });
+      return {
+        ok: true as const,
+        ref: artifact.ref,
+        asOf: brief.asOf,
+        summary: brief.executiveSummary,
+      };
+    },
+  }),
   getCompanyFinancial: tool({
     description:
       "Retrieve a real, sourced financial figure for a US-listed company from SEC EDGAR. Returns the value with its source, or a not-obtained marker if unavailable. US-listed only.",
@@ -152,7 +229,8 @@ const tools = {
     inputSchema: z.object({ noi: z.number(), assetValue: z.number() }),
     execute: async ({ noi, assetValue }) => goingConcernYield(noi, assetValue),
   }),
-};
+  } as const;
+}
 
 export async function POST(req: Request) {
   const {
@@ -161,16 +239,23 @@ export async function POST(req: Request) {
   }: { messages: UIMessage[]; mode?: "routine" | "ic" } = await req.json();
 
   const model = MODELS[mode === "ic" ? "ic" : "routine"];
+  const modelMessages = await convertToModelMessages(messages);
 
-  const result = streamText({
-    model,
-    system: EVERLIN_SYSTEM,
-    messages: await convertToModelMessages(messages),
-    tools,
-    stopWhen: stepCountIs(8), // allow retrieve -> reason -> answer loops
+  // createUIMessageStream owns the assistant message lifecycle so that a tool
+  // (generateDailyBrief) can write a custom `data-artifact` part alongside the
+  // model's own stream, which is merged in via writer.merge.
+  const stream = createUIMessageStream<EverlinUIMessage>({
+    execute: ({ writer }) => {
+      const result = streamText({
+        model,
+        system: EVERLIN_SYSTEM,
+        messages: modelMessages,
+        tools: makeTools(writer),
+        stopWhen: stepCountIs(8), // allow retrieve -> reason -> answer loops
+      });
+      writer.merge(toUIMessageStream({ stream: result.stream }));
+    },
   });
 
-  return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream }),
-  });
+  return createUIMessageStreamResponse({ stream });
 }
