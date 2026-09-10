@@ -18,6 +18,7 @@ import type { MorningBrief } from "@/lib/everlin/schemas";
 import { COLORS, FONT_SIZES, SPACE, PAGE } from "@/lib/everlin/pdf/tokens";
 import { BODY_FONT, BODY_FONT_BOLD, BODY_FONT_OBLIQUE } from "@/lib/everlin/pdf/fonts";
 import { GOLDEN_FOOTER, GOLDEN_INSTRUMENTS } from "@/lib/everlin/golden-checklist";
+import { LevelsBarChart } from "@/lib/everlin/pdf/charts";
 
 const s = StyleSheet.create({
   page: {
@@ -132,28 +133,17 @@ function MarketsAtAGlance({ brief }: { brief: MorningBrief }) {
 }
 
 /**
- * Obtained levels bar. The schema carries no change/delta series, so this shows
- * LATEST LEVELS (magnitude bars), NOT day-over-day % change — labelling it
- * "% CHANGE" would present sourced levels as changes, which is misleading in an
- * IC brief. When a prior-close series is added, swap in real deltas + relabel.
+ * Obtained-levels chart band. Uses the native-SVG LevelsBarChart (charts.tsx) —
+ * deterministic geometry, matches the golden's markets-at-a-glance bar. Labelled
+ * "OBTAINED LEVELS" not "% CHANGE": the schema has no delta series, so showing
+ * levels-as-changes would be misleading. Swap to real deltas when a prior-close
+ * series exists.
  */
 function LatestLevelsChart({ brief }: { brief: MorningBrief }) {
-  const rows = brief.figures.filter((f) => !f.missing && typeof f.value === "number").slice(0, 10);
-  const max = Math.max(1, ...rows.map((r) => Math.abs(r.value ?? 0)));
   return (
     <>
       <Band>OBTAINED LEVELS</Band>
-      {rows.map((r) => {
-        const v = r.value ?? 0;
-        const w = `${Math.min(60, (Math.abs(v) / max) * 60)}%`;
-        return (
-          <View key={r.label} style={s.barTrack}>
-            <Text style={s.barLabel}>{r.label}</Text>
-            <View style={[s.bar, { width: w, backgroundColor: COLORS.brandGreen }]} />
-            <Text style={s.barVal}>{`${v}${r.unit ? ` ${r.unit}` : ""}`}</Text>
-          </View>
-        );
-      })}
+      <LevelsBarChart brief={brief} />
     </>
   );
 }
