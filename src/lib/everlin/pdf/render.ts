@@ -12,7 +12,7 @@
  */
 import React from "react";
 import crypto from "node:crypto";
-import { renderToBuffer } from "@react-pdf/renderer";
+import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import type { MorningBrief } from "@/lib/everlin/schemas";
 import { BriefDocument } from "@/lib/everlin/pdf/brief-document";
 import { ensureFontsRegistered } from "@/lib/everlin/pdf/fonts";
@@ -58,7 +58,10 @@ function normalizePdf(raw: Buffer): Buffer {
  */
 export async function renderBriefPdf(brief: MorningBrief): Promise<RenderedBrief> {
   ensureFontsRegistered();
-  const rendered = await renderToBuffer(React.createElement(BriefDocument, { brief }));
+  // BriefDocument returns a <Document>; TS can't see through the FC wrapper, so
+  // assert the element type react-pdf expects. Runtime is verified (live render).
+  const el = React.createElement(BriefDocument, { brief }) as React.ReactElement<DocumentProps>;
+  const rendered = await renderToBuffer(el);
   const pdf = normalizePdf(rendered);
   const byteHash = crypto.createHash("sha256").update(pdf).digest("hex");
   return { pdf, byteHash, bytes: pdf.length };
