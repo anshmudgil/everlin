@@ -334,3 +334,69 @@ export async function treasuryYield(): Promise<Fact> {
     return { ...base, value: null, note: `Fetch failed (${(e as Error).message}). Not obtained.` };
   }
 }
+
+// --- ECB Data Portal (SDMX) — official EU FX reference rates (T00b) ---------
+// Clean-redistribution FX backup for AUD/USD. ECB publishes vs EUR only, so
+// AUD/USD is derived by crossing the two EUR legs (EUR/USD ÷ EUR/AUD... i.e.
+// AUD/USD = (EUR/USD) / (EUR/AUD), and ECB gives USD-per-EUR and AUD-per-EUR).
+// ToS: free reuse incl. commercial with "Source: European Central Bank".
+// Verified live 2026-09-10 in docs/research/full-brief-data-sources.md.
+const ECB_BASE = "https://data-api.ecb.europa.eu/service/data/EXR/D";
+async function ecbLeg(currency: "USD" | "AUD"): Promise<{ v: number; date: string } | null> {
+  const url = `${ECB_BASE}.${currency}.EUR.SP00.A?lastNObservations=1&format=csvdata`;
+  const res = await fetch(url, { next: { revalidate: 3600 } });
+  if (!res.ok) return null;
+  const text = await res.text();
+  // csvdata: header row then one data row; TIME_PERIOD + OBS_VALUE columns.
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return null;
+  const header = lines[0].split(",");
+  const tIdx = header.indexOf("TIME_PERIOD");
+  const vIdx = header.indexOf("OBS_VALUE");
+  if (tIdx < 0 || vIdx < 0) return null;
+  const cells = lines[1].split(",");
+  const v = Number(cells[vIdx]);
+  if (!Number.isFinite(v)) return null;
+  return { v, date: cells[tIdx] };
+}
+
+/**
+ * AUD/USD derived from ECB reference rates (USD-per-EUR ÷ AUD-per-EUR).
+ * Backup for the RBA F11.1 primary (auFxRate). Honest not-obtained on failure.
+ */
+export async function ecbFxRate(): Promise<Fact> {
+  const base = {
+    label: "AUD/USD exchange rate (ECB derived)",
+    source: "European Central Bank (SDMX EXR)",
+    sourceUrl: `${ECB_BASE}.USD.EUR.SP00.A`,
+  };
+  try {
+    const [usd, aud] = await Promise.all([ecbLeg("USD"), ecbLeg("AUD")]);
+    if (!usd || !aud) return { ...base, value: null, note: "ECB EXR leg unavailable. Not obtained." };
+    // USD per EUR ÷ AUD per EUR = USD per AUD.
+    const audUsd = usd.v / aud.v;
+    return {
+      label: "AUD/USD exchange rate (ECB derived)",
+      value: Number(audUsd.toFixed(4)),
+      unit: "USD per AUD",
+      source: "European Central Bank (SDMX EXR, derived)",
+      sourceUrl: `${ECB_BASE}.USD.EUR.SP00.A`,
+      asOf: usd.date,
+      note: `Derived: USD/EUR ${usd.v} ÷ AUD/EUR ${aud.v}.`,
+    };
+  } catch (e) {
+    return { ...base, value: null, note: `ECB fetch failed (${(e as Error).message}). Not obtained.` };
+  }
+}
+
+/**
+ * FX with fallback: RBA F11.1 primary, ECB derived backup. Used by the brief so
+ * a single RBA outage doesn't blank AUD/USD. Licensed index levels are NOT here
+ * — those stay not-obtained by design.
+ */
+export async function auFxRateWithBackup(): Promise<Fact> {
+  const primary = await auFxRate();
+  if (primary.value !== null) return primary;
+  const backup = await ecbFxRate();
+  return backup;
+}
