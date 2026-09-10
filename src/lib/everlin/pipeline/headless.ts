@@ -21,6 +21,7 @@ import {
   type Fact,
 } from "@/lib/data-sources";
 import { buildNarrative } from "@/lib/everlin/narrative/engine";
+import { clientCleanGate, type Override, type OverrideAudit } from "@/lib/everlin/verification/client-clean-gate";
 import { renderBriefPdf } from "@/lib/everlin/pdf/render";
 import { validateOutput } from "@/lib/everlin/validate";
 import { DISCLAIMER, MorningBrief } from "@/lib/everlin/schemas";
@@ -54,7 +55,15 @@ export type HeadlessResult =
 
 export async function buildDailyBriefHeadless(
   asOf: string,
-  opts: { store?: BriefStore; force?: boolean; nowIso: string; narrativeLlm?: boolean } = { nowIso: "1970-01-01T00:00:00Z" },
+  opts: {
+    store?: BriefStore;
+    force?: boolean;
+    nowIso: string;
+    narrativeLlm?: boolean;
+    band?: "client" | "internal";
+    override?: Override;
+    audit?: OverrideAudit;
+  } = { nowIso: "1970-01-01T00:00:00Z" },
 ): Promise<HeadlessResult> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
     return { ok: false, date: asOf, errors: [`asOf must be YYYY-MM-DD, got '${asOf}'`] };
@@ -121,8 +130,22 @@ export async function buildDailyBriefHeadless(
     return { ok: false, date: asOf, errors: parsed.error.issues.map((i) => i.message) };
   }
 
-  const rendered = await renderBriefPdf(parsed.data);
-  await store.put({ date: asOf, briefJson: parsed.data, pdf: rendered.pdf, byteHash: rendered.byteHash, generatedAt: opts.nowIso });
+  // T3 — trust-spine boundary: for a client-band render, any figure whose
+  // provenance is not client-clean (a scraped/FRED/aggregated level) is coerced
+  // to not-obtained unless an authorised override is supplied. Today's figures
+  // are all client-clean or already missing, so this is a no-op on the default
+  // path; it becomes load-bearing once the research agent (T7) proposes
+  // internal-tos-risk candidates.
+  const gated = clientCleanGate(parsed.data.figures, {
+    band: opts.band ?? "client",
+    override: opts.override,
+    audit: opts.audit,
+    nowIso: opts.nowIso,
+  });
+  const briefToRender = { ...parsed.data, figures: gated.figures };
+
+  const rendered = await renderBriefPdf(briefToRender);
+  await store.put({ date: asOf, briefJson: briefToRender, pdf: rendered.pdf, byteHash: rendered.byteHash, generatedAt: opts.nowIso });
 
   return { ok: true, date: asOf, byteHash: rendered.byteHash, bytes: rendered.bytes, deduped: false, pdf: rendered.pdf };
 }
