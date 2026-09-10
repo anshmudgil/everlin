@@ -4,7 +4,7 @@ title: 'T08: PDF render orchestrator with fixed metadata and byte-hash'
 status: To Do
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 05:30'
 labels:
   - pdf-brief
   - P1
@@ -26,4 +26,5 @@ Create src/lib/everlin/brief/render.ts exporting renderMorningBriefPDF(brief: Mo
 - [ ] #2 PDF CreationDate/ModDate/Producer/ID are overridden to fixed constants (greppable in render.ts)
 - [ ] #3 Rendering the same fixture twice in-process yields identical byteHash
 - [ ] #4 Sections appear in the golden order asserted by T01 checklist
+- [ ] #5 PROOF: rendering the SAME MorningBrief fixture twice yields identical SHA-256 (byte-identical); test runs both and asserts hash equality
 <!-- AC:END -->

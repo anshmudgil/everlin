@@ -426,3 +426,24 @@ Additively extend src/app/api/chat/route.ts: when generateDailyBrief runs, strea
 
 **Depends on:** T16
 **Files:** src/app/api/chat/route.ts
+
+---
+
+## Plan revision — data-source expansion + verification gates (added on approval request)
+
+### New data-source tickets (P0 foundation)
+- **T00a (TASK-26): News-attribution retrieval layer** — cited headlines (<=200 chars) + outlet per Claim, matching the golden ATTRIBUTED NEWS block. Ship-safe attribution slice only; never redistributes licensed index/quote data. Feeds the reasoning-trace (T11) + narrative (T12) tickets.
+- **T00b (TASK-27): ECB FX backup + official-series gap coverage** — ECB SDMX as clean-redistribution FX fallback behind RBA F11.1; licensed index levels stay marked not-obtained by design. Feeds the verify node (T10).
+
+### Source-scope decision (user)
+News-attribution layer only. Index levels (ASX200/S&P/VIX/gold) remain **not obtained** — licensed IP, no free commercial source (verified in docs/research/full-brief-data-sources.md). The brief marks the gap, never fabricates — same discipline the golden itself uses.
+
+### Final verification gates (P5, run only after all build tickets Done)
+- **T21 (TASK-28): Final QA** — /qa gstack browser end-to-end; PDF renders + golden fidelity + streaming observed; fix-and-reverify.
+- **T22 (TASK-29): Final code review** — full feature diff; determinism + no-fabrication + ToS-guard invariants confirmed.
+- **T23 (TASK-30): Final /devex-review** — headless entry + PDF route + adapter/store interfaces; new-dev time-to-first-brief.
+
+Gate chain: T21 -> T22 -> T23, each depending on the last build ticket (T20 streaming). Total plan = 25 tickets.
+
+### AC discipline
+Every ticket AC asserts *behavior that can be run and observed*, not existence. Riskiest tickets (T04 renderer, T08 byte-hash, T13 golden harness, T18 cron) carry explicit PROOF criteria: render a real %PDF- buffer, SHA-256 equality across runs, fidelity diff vs the golden within threshold, injected-clock cron idempotency + holiday skip.

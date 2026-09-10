@@ -4,7 +4,7 @@ title: 'T04: react-pdf React-19 compatibility spike (renderer gate)'
 status: To Do
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 05:30'
 labels:
   - pdf-brief
   - P1
@@ -26,4 +26,5 @@ Add @react-pdf/renderer at an exact pinned version to package.json and prove it 
 - [ ] #2 renderer-spike.ts renders a Buffer whose first 5 bytes are '%PDF-' under the project's React 19.2/Next 16 runtime
 - [ ] #3 The spike embeds a T03 font and does not throw a React reconciler/peer-dep error
 - [ ] #4 A committed note records which renderer won and why (react-pdf vs pdfkit fallback)
+- [ ] #5 PROOF: a throwaway react-pdf document renders to a non-empty PDF buffer under this repo React 19 / Next 16 — command runs and exits 0, or the ticket escalates renderer choice
 <!-- AC:END -->

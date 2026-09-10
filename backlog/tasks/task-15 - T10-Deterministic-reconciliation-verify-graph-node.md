@@ -4,13 +4,15 @@ title: 'T10: Deterministic reconciliation (verify) graph node'
 status: To Do
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 05:30'
 labels:
   - pdf-brief
   - P2
 milestone: m-1
 dependencies:
   - TASK-10
+  - TASK-26
+  - TASK-27
 ordinal: 15000
 ---
 

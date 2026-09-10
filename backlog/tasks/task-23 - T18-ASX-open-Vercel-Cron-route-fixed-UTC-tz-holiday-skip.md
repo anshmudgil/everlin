@@ -4,7 +4,7 @@ title: 'T18: ASX-open Vercel Cron route (fixed UTC + tz + holiday skip)'
 status: To Do
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 05:30'
 labels:
   - pdf-brief
   - P4
@@ -28,4 +28,5 @@ Add vercel.json with a Cron at a fixed UTC time and create src/app/api/cron/brie
 - [ ] #2 The route skips non-trading days (weekend/holiday) and is idempotent via BriefStore.has(asOf)
 - [ ] #3 On a trading day it writes {briefJson,pdfBuffer,byteHash} to the store and invokes the delivery seam
 - [ ] #4 The route is guarded by CRON_SECRET and never throws (logs + returns on failure)
+- [ ] #5 PROOF: with injected clock at ASX open on a trading day, the cron handler builds exactly one brief; a second invocation same day is idempotent (no dup); a market holiday is skipped — three assertions, all tested
 <!-- AC:END -->

@@ -4,14 +4,15 @@ title: 'T11: Deterministic reasoning-trace builder'
 status: To Do
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 05:30'
 labels:
   - pdf-brief
   - P2
 milestone: m-1
 dependencies:
-  - TASK-15
   - TASK-13
+  - TASK-15
+  - TASK-26
 ordinal: 16000
 ---
 

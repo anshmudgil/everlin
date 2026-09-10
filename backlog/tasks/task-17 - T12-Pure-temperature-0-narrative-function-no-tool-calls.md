@@ -4,13 +4,14 @@ title: 'T12: Pure temperature-0 narrative function (no tool calls)'
 status: To Do
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 05:30'
 labels:
   - pdf-brief
   - P2
 milestone: m-1
 dependencies:
   - TASK-16
+  - TASK-26
 ordinal: 17000
 ---
 
