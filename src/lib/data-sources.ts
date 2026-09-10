@@ -400,3 +400,34 @@ export async function auFxRateWithBackup(): Promise<Fact> {
   const backup = await ecbFxRate();
   return backup;
 }
+
+// --- FRED keyless CSV (INTERNAL-ONLY retrieval) -----------------------------
+// FRED is a free St. Louis Fed *pipe*, but much of its content is third-party
+// index IP (S&P DJI, CBOE, Nasdaq). Per docs/research/full-brief-data-sources.md
+// it is fine for INTERNAL research, NOT for a client brief. So fredSeries()
+// returns a Fact whose source names FRED — the ProvenanceClassifier will label
+// it internal-tos-risk, and the ClientCleanGate blocks it from client
+// distribution without an override. Used only by the research orchestrator.
+const FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv";
+
+export async function fredSeries(seriesId: string, label: string): Promise<Fact> {
+  const url = `${FRED_CSV}?id=${encodeURIComponent(seriesId)}`;
+  const base = { label, source: `FRED (St. Louis Fed) series ${seriesId}`, sourceUrl: url };
+  try {
+    const res = await fetch(url, { next: { revalidate: 3600 } });
+    if (!res.ok) return { ...base, value: null, note: `HTTP ${res.status}. Not obtained.` };
+    const text = await res.text();
+    const rows = text.trim().split(/\r?\n/).slice(1); // drop header
+    // Take the last row with a non-empty numeric value.
+    let last: { date: string; val: number } | null = null;
+    for (const r of rows) {
+      const [date, raw] = r.split(",");
+      const v = Number(raw);
+      if (raw && Number.isFinite(v)) last = { date, val: v };
+    }
+    if (!last) return { ...base, value: null, note: "No numeric FRED value. Not obtained." };
+    return { label, value: last.val, unit: "", source: `FRED (St. Louis Fed) series ${seriesId}`, sourceUrl: url, asOf: last.date, note: "INTERNAL-ONLY: FRED pipe carries third-party index IP." };
+  } catch (e) {
+    return { ...base, value: null, note: `FRED fetch failed (${(e as Error).message}). Not obtained.` };
+  }
+}
