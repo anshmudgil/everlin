@@ -18,6 +18,7 @@ import { PDFParse } from "pdf-parse";
 import { renderBriefPdf } from "@/lib/everlin/pdf/render";
 import { GOLDEN_FIXTURE } from "@/lib/everlin/pdf/golden-fixture";
 import { GOLDEN_FOOTER } from "@/lib/everlin/golden-checklist";
+import { lintVernacular } from "@/lib/everlin/narrative/vernacular";
 
 export type HarnessReport = {
   deterministic: boolean;
@@ -25,18 +26,23 @@ export type HarnessReport = {
   hashB: string;
   fidelity: { anchor: string; present: boolean }[];
   fidelityPass: boolean;
+  pages: number;
+  pagesPass: boolean; // V10: golden is 3 pages
+  chartPresent: boolean; // V10: OBTAINED LEVELS chart band
+  vernacularPass: boolean; // V10: rendered text is in-register
+  vernacularFindings: string[];
   pass: boolean;
 };
 
 /**
- * Recover the visible text layer from the PDF. react-pdf encodes glyphs as
- * hex CID runs (not (text)Tj), so a raw scan can't read them — pdf-parse's
- * PDFParse does the font-CMap reversal and returns real text.
+ * Recover the visible text layer + page count from the PDF. react-pdf encodes
+ * glyphs as hex CID runs (not (text)Tj), so a raw scan can't read them —
+ * pdf-parse's PDFParse does the font-CMap reversal and returns real text.
  */
-async function extractText(pdf: Buffer): Promise<string> {
+async function extract(pdf: Buffer): Promise<{ text: string; pages: number }> {
   const parser = new PDFParse({ data: new Uint8Array(pdf) });
   const result = await parser.getText();
-  return result.text;
+  return { text: result.text, pages: result.total ?? 0 };
 }
 
 export async function runHarness(): Promise<HarnessReport> {
@@ -44,7 +50,7 @@ export async function runHarness(): Promise<HarnessReport> {
   const b = await renderBriefPdf(GOLDEN_FIXTURE);
   const deterministic = a.byteHash === b.byteHash;
 
-  const text = await extractText(a.pdf);
+  const { text, pages } = await extract(a.pdf);
   const anchors = [
     "EVERLIN MORNING BRIEF",
     "Enduring Legacy.",
@@ -60,5 +66,23 @@ export async function runHarness(): Promise<HarnessReport> {
   const fidelity = anchors.map((anchor) => ({ anchor, present: text.includes(anchor) }));
   const fidelityPass = fidelity.every((f) => f.present);
 
-  return { deterministic, hashA: a.byteHash, hashB: b.byteHash, fidelity, fidelityPass, pass: deterministic && fidelityPass };
+  // V10 additions.
+  const pagesPass = pages === 3;
+  const chartPresent = text.includes("OBTAINED LEVELS");
+  const vern = lintVernacular(text);
+  const vernacularPass = vern.pass;
+
+  return {
+    deterministic,
+    hashA: a.byteHash,
+    hashB: b.byteHash,
+    fidelity,
+    fidelityPass,
+    pages,
+    pagesPass,
+    chartPresent,
+    vernacularPass,
+    vernacularFindings: vern.findings,
+    pass: deterministic && fidelityPass && pagesPass && chartPresent && vernacularPass,
+  };
 }
