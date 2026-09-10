@@ -41,7 +41,7 @@ export class NoopDeliveryAdapter implements DeliveryAdapter {
 /** Base for real channels — each throws until implemented in a later phase. */
 abstract class UnimplementedAdapter implements DeliveryAdapter {
   abstract readonly channel: string;
-  async deliver(_input: DeliveryInput): Promise<DeliveryResult> {
+  async deliver(): Promise<DeliveryResult> {
     throw new Error(`${this.channel} delivery not implemented (out of current scope)`);
   }
 }
