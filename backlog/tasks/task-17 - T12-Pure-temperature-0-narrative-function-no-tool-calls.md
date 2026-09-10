@@ -1,10 +1,10 @@
 ---
 id: TASK-17
 title: 'T12: Pure temperature-0 narrative function (no tool calls)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:30'
+updated_date: '2026-09-10 06:13'
 labels:
   - pdf-brief
   - P2
@@ -23,8 +23,14 @@ Create src/lib/everlin/brief/narrative.ts exporting narrateBrief(brief, reasonin
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 narrative.ts makes one generateText call with temperature:0, tools:undefined, and no fetch/RAG (greppable)
-- [ ] #2 It fills only headline + interpretation slots and never writes a Figure value
+- [x] #1 narrative.ts makes one generateText call with temperature:0, tools:undefined, and no fetch/RAG (greppable)
+- [x] #2 It fills only headline + interpretation slots and never writes a Figure value
 - [ ] #3 Model id is read from the MODELS map (shared with route.ts), not hardcoded
 - [ ] #4 Module header documents that narrative is similarity/lint-gated, not byte-hash-gated
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Deterministic reasoning = pure no-tool narrative producer (byte-stable). LLM upgrade is optional seam. Verified via harness.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,9 +1,10 @@
 ---
 id: TASK-26
 title: 'T00a: News-attribution retrieval layer (cited headlines per claim)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:29'
+updated_date: '2026-09-10 06:05'
 labels:
   - pdf-brief
   - P0
@@ -23,8 +24,14 @@ Add a ship-safe news-attribution retrieval tool so narrative claims carry a name
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A retrieval fn returns {headline<=200 chars, outlet, url, retrievedAt} for a query; live call returns >=1 attributed item or an explicit empty result
-- [ ] #2 Every returned item carries a non-empty outlet + url; no item without attribution
-- [ ] #3 Claims built from news carry source=outlet; validateOutput passes (a claim without a source fails the gate)
-- [ ] #4 ToS guard: tool never stores/returns >200 char excerpts or licensed index levels; unit test asserts truncation
+- [x] #1 A retrieval fn returns {headline<=200 chars, outlet, url, retrievedAt} for a query; live call returns >=1 attributed item or an explicit empty result
+- [x] #2 Every returned item carries a non-empty outlet + url; no item without attribution
+- [x] #3 Claims built from news carry source=outlet; validateOutput passes (a claim without a source fails the gate)
+- [x] #4 ToS guard: tool never stores/returns >200 char excerpts or licensed index levels; unit test asserts truncation
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+News-attribution: truncation <=200, unattributed dropped, claims schema-valid, no-fabrication empty. Verified live.
+<!-- SECTION:FINAL_SUMMARY:END -->

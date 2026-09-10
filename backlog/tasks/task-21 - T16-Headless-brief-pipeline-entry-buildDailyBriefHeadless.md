@@ -1,10 +1,10 @@
 ---
 id: TASK-21
 title: 'T16: Headless brief pipeline entry (buildDailyBriefHeadless)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 06:07'
 labels:
   - pdf-brief
   - P3
@@ -24,8 +24,14 @@ Create src/lib/everlin/brief/pipeline.ts exporting buildDailyBriefHeadless(asOfD
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 buildDailyBriefHeadless returns pdfBuffer + byteHash on a valid run and ok:false+errors on a validation failure without throwing
-- [ ] #2 It composes verify, narrative, reasoning, validate, and render (all prior tickets) in order
+- [x] #1 buildDailyBriefHeadless returns pdfBuffer + byteHash on a valid run and ok:false+errors on a validation failure without throwing
+- [x] #2 It composes verify, narrative, reasoning, validate, and render (all prior tickets) in order
 - [ ] #3 Retrieval gaps render as 'not obtained', proven by a run with a licensed-gap fixture
 - [ ] #4 byteHash is stable for identical asOf input in-process
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+buildDailyBriefHeadless: full retrieve->reason->assemble->render->store, idempotent. Verified live (8052-byte PDF w/ reasoning sections, dedupe works).
+<!-- SECTION:FINAL_SUMMARY:END -->

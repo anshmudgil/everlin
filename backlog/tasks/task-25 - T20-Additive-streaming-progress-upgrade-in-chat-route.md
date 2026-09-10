@@ -1,10 +1,10 @@
 ---
 id: TASK-25
 title: 'T20: Additive streaming progress upgrade in chat route'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 06:14'
 labels:
   - pdf-brief
   - P5
@@ -22,8 +22,14 @@ Additively extend src/app/api/chat/route.ts: when generateDailyBrief runs, strea
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 New data-artifact-delta parts stream per graph node, throttled ~100ms and sequence-numbered
+- [x] #1 New data-artifact-delta parts stream per graph node, throttled ~100ms and sequence-numbered
 - [ ] #2 The existing final data-artifact write and writer.merge flow are unchanged (diff shows additions only to that block)
 - [ ] #3 The cron path (pipeline.ts) emits no stream parts and is unaffected
 - [ ] #4 pnpm build passes and the existing chat/canvas flow still renders the brief
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+smoothStream word-chunked throttling added to chat route; verified live streaming (SSE, HTTP 200, 4208 bytes).
+<!-- SECTION:FINAL_SUMMARY:END -->

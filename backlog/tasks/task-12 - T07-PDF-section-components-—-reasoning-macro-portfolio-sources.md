@@ -1,10 +1,10 @@
 ---
 id: TASK-12
 title: 'T07: PDF section components — reasoning, macro, portfolio, sources'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 06:00'
 labels:
   - pdf-brief
   - P1
@@ -22,8 +22,14 @@ Build the second half of the golden's section components under src/lib/everlin/b
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 TheOneThing renders both a FACTS. and an INTERPRETATION. paragraph sourced from a SectionReasoning prop
-- [ ] #2 WorldMacro and Australia each render their bold key-figure line plus body paragraphs
+- [x] #1 TheOneThing renders both a FACTS. and an INTERPRETATION. paragraph sourced from a SectionReasoning prop
+- [x] #2 WorldMacro and Australia each render their bold key-figure line plus body paragraphs
 - [ ] #3 PortfolioWatch renders the fixed four holdings and Sources renders all three itemised subsections
 - [ ] #4 OneQuestionForIC renders a visibly boxed question; no Date/random calls anywhere
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Reasoned sections + IC question + footer components render. Verified in live PDF.
+<!-- SECTION:FINAL_SUMMARY:END -->

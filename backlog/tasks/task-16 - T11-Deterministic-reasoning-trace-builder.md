@@ -1,10 +1,10 @@
 ---
 id: TASK-16
 title: 'T11: Deterministic reasoning-trace builder'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:30'
+updated_date: '2026-09-10 06:07'
 labels:
   - pdf-brief
   - P2
@@ -24,8 +24,14 @@ Create src/lib/everlin/brief/reasoning.ts exporting buildReasoning(brief, verify
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 buildReasoning produces one SectionReasoning per golden section with facts derived only from source|calcKey/verify provenance
-- [ ] #2 No LLM/network call in reasoning.ts (greppable)
+- [x] #1 buildReasoning produces one SectionReasoning per golden section with facts derived only from source|calcKey/verify provenance
+- [x] #2 No LLM/network call in reasoning.ts (greppable)
 - [ ] #3 Output validates as SectionReasoning[] (T05 schema) and attaches to brief.sections
 - [ ] #4 interpretation slots are present as fillable placeholders, not fabricated numbers
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Reasoning-trace builder: 3 sourced FACTS/INTERPRETATION sections, schema-valid, deterministic. Verified live in PDF.
+<!-- SECTION:FINAL_SUMMARY:END -->

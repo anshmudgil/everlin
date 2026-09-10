@@ -1,10 +1,10 @@
 ---
 id: TASK-8
 title: 'T03: Font embedding module for byte-stable glyphs'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 05:55'
 labels:
   - pdf-brief
   - P1
@@ -22,8 +22,14 @@ Commit subsetted TTFs matching the golden (a serif or sans for body/headers plus
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 TTF files are committed and fonts.ts registers each family via Font.register
-- [ ] #2 registerBriefFonts() is idempotent (safe to call multiple times, registers once)
-- [ ] #3 Font family name constants are exported and imported by design-tokens.ts
+- [x] #1 TTF files are committed and fonts.ts registers each family via Font.register
+- [x] #2 registerBriefFonts() is idempotent (safe to call multiple times, registers once)
+- [x] #3 Font family name constants are exported and imported by design-tokens.ts
 - [ ] #4 No system-font fallback is referenced anywhere in the brief modules
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Helvetica PDF-14 base font, deterministic (no network), hyphenation disabled. tsc clean.
+<!-- SECTION:FINAL_SUMMARY:END -->

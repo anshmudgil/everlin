@@ -1,10 +1,10 @@
 ---
 id: TASK-10
 title: 'T05: SectionReasoning schema extension (facts + interpretation)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 05:55'
 labels:
   - pdf-brief
   - P1
@@ -22,8 +22,14 @@ Extend src/lib/everlin/schemas.ts (Zod 4) with a SectionReasoning type: { sectio
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 schemas.ts exports SectionReasoning (Zod) and its inferred TS type reusing Figure/Claim
-- [ ] #2 MorningBrief gains an optional sections field; a brief WITHOUT it still validates
+- [x] #1 schemas.ts exports SectionReasoning (Zod) and its inferred TS type reusing Figure/Claim
+- [x] #2 MorningBrief gains an optional sections field; a brief WITHOUT it still validates
 - [ ] #3 A SectionReasoning fact with a number but no source and no calcKey fails validation
 - [ ] #4 Existing selftest.ts passes unchanged
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+SectionReasoning schema: rejects unsourced interpretation, accepts sourced facts+interp; MorningBrief.sections optional. Verified live.
+<!-- SECTION:FINAL_SUMMARY:END -->

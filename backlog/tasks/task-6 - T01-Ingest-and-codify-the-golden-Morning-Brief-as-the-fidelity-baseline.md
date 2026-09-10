@@ -1,9 +1,10 @@
 ---
 id: TASK-6
 title: 'T01: Ingest and codify the golden Morning Brief as the fidelity baseline'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:12'
+updated_date: '2026-09-10 05:45'
 labels:
   - pdf-brief
   - P0
@@ -20,8 +21,14 @@ Commit the client's 3-page golden Morning Brief PDF at tests/fixtures/golden/gol
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 tests/fixtures/golden/golden-morning-brief.pdf exists and its SHA-256 matches tests/fixtures/golden/golden.sha256
-- [ ] #2 golden-checklist.ts exports an ordered array of the golden's section identifiers plus the exact 10-instrument list and verbatim footer string
-- [ ] #3 golden-checklist.ts exports a vernacular phrase array and an RGB design-token object sampled from the golden
-- [ ] #4 A blocker note is committed if the real golden PDF is unavailable, rather than a fabricated target
+- [x] #1 tests/fixtures/golden/golden-morning-brief.pdf exists and its SHA-256 matches tests/fixtures/golden/golden.sha256
+- [x] #2 golden-checklist.ts exports an ordered array of the golden's section identifiers plus the exact 10-instrument list and verbatim footer string
+- [x] #3 golden-checklist.ts exports a vernacular phrase array and an RGB design-token object sampled from the golden
+- [x] #4 A blocker note is committed if the real golden PDF is unavailable, rather than a fabricated target
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Golden PDF fixture + SHA-256 (matches, verified live) + golden-checklist.ts (16 sections, 10 instruments, footer, vernacular, RGB tokens, conventions) all transcribed verbatim from the reference. Module loads + exports verified via tsx.
+<!-- SECTION:FINAL_SUMMARY:END -->

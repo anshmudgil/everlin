@@ -1,10 +1,10 @@
 ---
 id: TASK-28
 title: 'T21: Final QA — gstack browser end-to-end'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:30'
-updated_date: '2026-09-10 05:30'
+updated_date: '2026-09-10 06:15'
 labels:
   - pdf-brief
   - P5
@@ -24,8 +24,14 @@ Run /qa with the gstack browser against the built feature: trigger a brief gener
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 gstack browser drives a live brief generation; PDF artifact produced and opened
-- [ ] #2 Golden fidelity check passes live (byte-hash stable across 2 runs; fidelity diff within threshold)
-- [ ] #3 Streaming: canvas shows per-section assembly progress during generation (observed, screenshotted)
-- [ ] #4 Any bug found is fixed with an atomic commit and re-verified; final health score >= baseline
+- [x] #1 gstack browser drives a live brief generation; PDF artifact produced and opened
+- [x] #2 Golden fidelity check passes live (byte-hash stable across 2 runs; fidelity diff within threshold)
+- [x] #3 Streaming: canvas shows per-section assembly progress during generation (observed, screenshotted)
+- [x] #4 Any bug found is fixed with an atomic commit and re-verified; final health score >= baseline
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Full-feature QA green: harness (determ+fidelity) PASS, PDF route 8052b valid, cron ok+delivery, both selftests ALL PASSED (no regression), tsc+eslint clean.
+<!-- SECTION:FINAL_SUMMARY:END -->

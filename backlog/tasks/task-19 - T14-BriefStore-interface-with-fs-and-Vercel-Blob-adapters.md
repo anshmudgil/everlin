@@ -1,9 +1,10 @@
 ---
 id: TASK-19
 title: 'T14: BriefStore interface with fs and Vercel Blob adapters'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 06:03'
 labels:
   - pdf-brief
   - P3
@@ -20,8 +21,14 @@ Create src/lib/everlin/brief/store.ts defining the BriefStore interface { put(da
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 store.ts exports a BriefStore interface and FsBriefStore + BlobBriefStore adapters
-- [ ] #2 getBriefStore() returns the fs adapter by default and the Blob adapter when the Blob env is present
-- [ ] #3 put then get round-trips the byteHash and pdfBuffer via the fs adapter
-- [ ] #4 has(date) returns true only after a put for that date (idempotency substrate)
+- [x] #1 store.ts exports a BriefStore interface and FsBriefStore + BlobBriefStore adapters
+- [x] #2 getBriefStore() returns the fs adapter by default and the Blob adapter when the Blob env is present
+- [x] #3 put then get round-trips the byteHash and pdfBuffer via the fs adapter
+- [x] #4 has(date) returns true only after a put for that date (idempotency substrate)
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+BriefStore fs+Blob adapters, verified put/get/has round-trip live.
+<!-- SECTION:FINAL_SUMMARY:END -->

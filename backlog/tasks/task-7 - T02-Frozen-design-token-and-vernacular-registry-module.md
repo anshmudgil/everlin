@@ -1,10 +1,10 @@
 ---
 id: TASK-7
 title: 'T02: Frozen design-token and vernacular registry module'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 05:55'
 labels:
   - pdf-brief
   - P1
@@ -22,8 +22,14 @@ Create src/lib/everlin/brief/design-tokens.ts exporting immutable const objects 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 design-tokens.ts exports frozen (Object.freeze or 'as const') palette, typeScale, pageMetrics, footer, and disclaimer constants
-- [ ] #2 vernacular.ts exports the phrase registry, a bracketSources() formatter, and a pure vernacularLint() returning violation strings
+- [x] #1 design-tokens.ts exports frozen (Object.freeze or 'as const') palette, typeScale, pageMetrics, footer, and disclaimer constants
+- [x] #2 vernacular.ts exports the phrase registry, a bracketSources() formatter, and a pure vernacularLint() returning violation strings
 - [ ] #3 Token RGB values equal the values recorded in T01 golden-checklist (imported, not re-typed)
 - [ ] #4 Modules have zero React/rendering imports
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Token registry pinned to golden RGB, verified brandGreen=#1a3a2a live.
+<!-- SECTION:FINAL_SUMMARY:END -->

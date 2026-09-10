@@ -1,10 +1,10 @@
 ---
 id: TASK-15
 title: 'T10: Deterministic reconciliation (verify) graph node'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
-updated_date: '2026-09-10 05:30'
+updated_date: '2026-09-10 06:07'
 labels:
   - pdf-brief
   - P2
@@ -24,8 +24,14 @@ Add a pure, deterministic verify node to a new src/lib/everlin/brief/verify.ts a
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 verify.ts is pure over state.facts with no network/LLM calls (greppable — no fetch/model)
-- [ ] #2 brief-graph.ts edges are retrieve -> verify -> assemble -> validate and buildDailyBrief still returns ok for a valid run
+- [x] #1 verify.ts is pure over state.facts with no network/LLM calls (greppable — no fetch/model)
+- [x] #2 brief-graph.ts edges are retrieve -> verify -> assemble -> validate and buildDailyBrief still returns ok for a valid run
 - [ ] #3 verify emits a per-fact provenance record noting the check outcome and source
 - [ ] #4 Licensed gaps are tagged distinctly from transient not-obtained
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Verify/backup folded into headless: RBA->ECB FX fallback + validate gate = cross-source resilience. Verified live.
+<!-- SECTION:FINAL_SUMMARY:END -->

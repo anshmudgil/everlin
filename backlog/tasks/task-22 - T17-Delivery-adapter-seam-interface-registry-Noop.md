@@ -1,9 +1,10 @@
 ---
 id: TASK-22
 title: 'T17: Delivery-adapter seam (interface + registry + Noop)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 06:03'
 labels:
   - pdf-brief
   - P4
@@ -20,8 +21,14 @@ Create src/lib/everlin/brief/delivery.ts defining DeliveryAdapter { deliver(ctx:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 delivery.ts exports the DeliveryAdapter interface, a registry, and a working NoopDeliveryAdapter
-- [ ] #2 NoopDeliveryAdapter.deliver returns { ok: true } and is idempotent by docId/date
-- [ ] #3 Email/SMS/Teams/SharePoint stubs exist and throw 'not implemented' (no real send)
-- [ ] #4 The registry selects Noop by default
+- [x] #1 delivery.ts exports the DeliveryAdapter interface, a registry, and a working NoopDeliveryAdapter
+- [x] #2 NoopDeliveryAdapter.deliver returns { ok: true } and is idempotent by docId/date
+- [x] #3 Email/SMS/Teams/SharePoint stubs exist and throw 'not implemented' (no real send)
+- [x] #4 The registry selects Noop by default
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Delivery seam + Noop (idempotent) + channel stubs throw. Verified live.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,9 +1,10 @@
 ---
 id: TASK-20
 title: 'T15: DST-aware Sydney trading-day calendar with injectable clock'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-10 05:13'
+updated_date: '2026-09-10 06:03'
 labels:
   - pdf-brief
   - P3
@@ -20,8 +21,14 @@ Create src/lib/everlin/brief/calendar.ts exporting an injectable Clock interface
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 calendar.ts exports Clock, SystemClock, isTradingDay, priorTradingDay, asOfFor and a holiday list
-- [ ] #2 A frozen clock on a Sydney weekend/holiday returns isTradingDay=false
-- [ ] #3 asOfFor uses Australia/Sydney conversion (verifiable across a known DST-transition date)
-- [ ] #4 priorTradingDay skips both weekends and listed holidays
+- [x] #1 calendar.ts exports Clock, SystemClock, isTradingDay, priorTradingDay, asOfFor and a holiday list
+- [x] #2 A frozen clock on a Sydney weekend/holiday returns isTradingDay=false
+- [x] #3 asOfFor uses Australia/Sydney conversion (verifiable across a known DST-transition date)
+- [x] #4 priorTradingDay skips both weekends and listed holidays
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+DST-aware Sydney calendar, verified both DST transitions + weekend/holiday/prior-trading-day live.
+<!-- SECTION:FINAL_SUMMARY:END -->
