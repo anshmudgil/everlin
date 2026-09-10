@@ -24,23 +24,20 @@ export async function GET(req: Request) {
 
   const store = getBriefStore();
   // Run the full headless pipeline (retrieve -> reason -> assemble -> render -> store).
+  // It returns the PDF bytes directly, so we never round-trip through store.get()
+  // (which is a network call in prod).
   const result = await buildDailyBriefHeadless(asOf, { store, force, nowIso: new Date().toISOString() });
   if (!result.ok) {
     return NextResponse.json({ error: "brief build failed", details: result.errors }, { status: 422 });
   }
 
-  const stored = await store.get(asOf);
-  if (!stored) {
-    return NextResponse.json({ error: "brief not found after build" }, { status: 500 });
-  }
-
-  return new NextResponse(new Uint8Array(stored.pdf), {
+  return new NextResponse(new Uint8Array(result.pdf), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="everlin-brief-${asOf}.pdf"`,
-      "X-Brief-Byte-Hash": stored.byteHash,
-      "X-Brief-Bytes": String(stored.pdf.length),
+      "X-Brief-Byte-Hash": result.byteHash,
+      "X-Brief-Bytes": String(result.pdf.length),
       "X-Brief-Deduped": String(result.deduped),
     },
   });

@@ -131,20 +131,26 @@ function MarketsAtAGlance({ brief }: { brief: MorningBrief }) {
   );
 }
 
-function PctChangeChart({ brief }: { brief: MorningBrief }) {
+/**
+ * Obtained levels bar. The schema carries no change/delta series, so this shows
+ * LATEST LEVELS (magnitude bars), NOT day-over-day % change — labelling it
+ * "% CHANGE" would present sourced levels as changes, which is misleading in an
+ * IC brief. When a prior-close series is added, swap in real deltas + relabel.
+ */
+function LatestLevelsChart({ brief }: { brief: MorningBrief }) {
   const rows = brief.figures.filter((f) => !f.missing && typeof f.value === "number").slice(0, 10);
   const max = Math.max(1, ...rows.map((r) => Math.abs(r.value ?? 0)));
   return (
     <>
-      <Band>% CHANGE</Band>
+      <Band>OBTAINED LEVELS</Band>
       {rows.map((r) => {
         const v = r.value ?? 0;
         const w = `${Math.min(60, (Math.abs(v) / max) * 60)}%`;
         return (
           <View key={r.label} style={s.barTrack}>
             <Text style={s.barLabel}>{r.label}</Text>
-            <View style={[s.bar, { width: w, backgroundColor: v >= 0 ? COLORS.up : COLORS.down }]} />
-            <Text style={s.barVal}>{v >= 0 ? `+${v}` : `${v}`}</Text>
+            <View style={[s.bar, { width: w, backgroundColor: COLORS.brandGreen }]} />
+            <Text style={s.barVal}>{`${v}${r.unit ? ` ${r.unit}` : ""}`}</Text>
           </View>
         );
       })}
@@ -203,6 +209,10 @@ export function BriefDocument({ brief }: { brief: MorningBrief }) {
       subject="IC Morning Brief"
       creator="Everlin brief engine"
       producer="Everlin brief engine"
+      // Pin the creation date at the SOURCE (epoch 0) so no wall-clock enters the
+      // PDF — determinism no longer depends on the normalizer's date regex. The
+      // normalizer stays as a second line of defence for the random /ID.
+      creationDate={new Date(0)}
     >
       <Page size={PAGE.size} style={s.page} wrap>
         <Masthead />
@@ -211,7 +221,7 @@ export function BriefDocument({ brief }: { brief: MorningBrief }) {
         </Text>
         <Text style={s.para}>{brief.executiveSummary}</Text>
         <MarketsAtAGlance brief={brief} />
-        <PctChangeChart brief={brief} />
+        <LatestLevelsChart brief={brief} />
         <MarketsTable brief={brief} />
         <ReasonedSection brief={brief} section="the-one-thing" title="THE ONE THING" />
         <ReasonedSection brief={brief} section="world-and-macro" title="WORLD & MACRO" />

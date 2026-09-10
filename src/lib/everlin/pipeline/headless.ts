@@ -34,14 +34,22 @@ const LICENSED_GAPS: { label: string; note: string }[] = [
 ];
 
 function factToFigure(f: Fact): MorningBrief["figures"][number] {
-  if (f.value === null || typeof f.value !== "number") {
-    return { label: f.label, value: null, unit: f.unit ?? "", calcKey: null, source: null, sourceUrl: null, asOf: null, missing: true, note: f.note ?? "Not obtained." };
+  // A finite number renders as an obtained figure. Anything else — null, a
+  // non-finite number, or a string value the numeric Figure schema can't hold —
+  // degrades GRACEFULLY to a marked not-obtained row, so one bad upstream cell
+  // never fabricates a value AND never hard-fails the whole day's brief.
+  if (typeof f.value === "number" && Number.isFinite(f.value)) {
+    return { label: f.label, value: f.value, unit: f.unit ?? "", calcKey: null, source: f.source, sourceUrl: f.sourceUrl ?? null, asOf: f.asOf ?? null, missing: false, note: f.note ?? "" };
   }
-  return { label: f.label, value: f.value, unit: f.unit ?? "", calcKey: null, source: f.source, sourceUrl: f.sourceUrl ?? null, asOf: f.asOf ?? null, missing: false, note: f.note ?? "" };
+  const note =
+    typeof f.value === "string"
+      ? `${f.label}: '${f.value}' is non-numeric; the brief's Figure column holds numbers only. Not obtained here.`
+      : f.note ?? "Not obtained.";
+  return { label: f.label, value: null, unit: f.unit ?? "", calcKey: null, source: null, sourceUrl: null, asOf: null, missing: true, note };
 }
 
 export type HeadlessResult =
-  | { ok: true; date: string; byteHash: string; bytes: number; deduped: boolean }
+  | { ok: true; date: string; byteHash: string; bytes: number; deduped: boolean; pdf: Buffer }
   | { ok: false; date: string; errors: string[] };
 
 export async function buildDailyBriefHeadless(
@@ -56,7 +64,11 @@ export async function buildDailyBriefHeadless(
   // Idempotency: one brief per trading day unless forced.
   if (!opts.force && (await store.has(asOf))) {
     const existing = await store.get(asOf);
-    return { ok: true, date: asOf, byteHash: existing?.byteHash ?? "", bytes: existing?.pdf.length ?? 0, deduped: true };
+    if (existing) {
+      return { ok: true, date: asOf, byteHash: existing.byteHash, bytes: existing.pdf.length, deduped: true, pdf: existing.pdf };
+    }
+    // has() true but get() failed — fall through and rebuild rather than return an
+    // empty/hashless result.
   }
 
   // Retrieve the free/official macro set (FX uses the RBA->ECB backup chain).
@@ -107,5 +119,5 @@ export async function buildDailyBriefHeadless(
   const rendered = await renderBriefPdf(parsed.data);
   await store.put({ date: asOf, briefJson: parsed.data, pdf: rendered.pdf, byteHash: rendered.byteHash, generatedAt: opts.nowIso });
 
-  return { ok: true, date: asOf, byteHash: rendered.byteHash, bytes: rendered.bytes, deduped: false };
+  return { ok: true, date: asOf, byteHash: rendered.byteHash, bytes: rendered.bytes, deduped: false, pdf: rendered.pdf };
 }

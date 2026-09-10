@@ -95,10 +95,14 @@ export class BlobBriefStore implements BriefStore {
   async get(date: string): Promise<StoredBrief | null> {
     const { head } = await this.blob();
     try {
-      await head(this.key(date, "json"));
-      // A full fetch of contents is possible but not needed for the has()-driven
-      // cron idempotency path; return a marker with empty pdf if only presence matters.
-      return null;
+      // head() gives the public urls; fetch both blobs and reconstruct the entry.
+      const jsonHead = await head(this.key(date, "json"));
+      const pdfHead = await head(this.key(date, "pdf"));
+      const [metaRes, pdfRes] = await Promise.all([fetch(jsonHead.url), fetch(pdfHead.url)]);
+      if (!metaRes.ok || !pdfRes.ok) return null;
+      const meta = (await metaRes.json()) as { byteHash: string; generatedAt: string; briefJson: unknown };
+      const pdf = Buffer.from(await pdfRes.arrayBuffer());
+      return { date, pdf, byteHash: meta.byteHash, generatedAt: meta.generatedAt, briefJson: meta.briefJson };
     } catch {
       return null;
     }

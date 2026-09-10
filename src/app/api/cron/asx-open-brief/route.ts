@@ -39,17 +39,23 @@ async function run() {
     return { skipped: false, ok: false, asOf, errors: built.errors };
   }
 
-  // Deliver via the seam (Noop until real channels are wired). Idempotent by docId.
-  const stored = await store.get(asOf);
+  // Durable idempotency: the store's has(date) already gated the build. If this
+  // run deduped, the brief for this date was produced on a prior invocation, so
+  // do NOT deliver again — that is what prevents a cron retry from double-sending
+  // once a real channel replaces Noop. Use the PDF from the build result
+  // directly (not store.get, which is a network round-trip in prod).
+  if (built.deduped) {
+    return { skipped: false, ok: true, asOf, byteHash: built.byteHash, deduped: true, delivery: { ok: true, channel: "noop", deduped: true } };
+  }
   const delivery = await getDeliveryAdapter("noop").deliver({
     docId: `EVL-DAILY-${asOf}`,
     date: asOf,
-    pdf: stored?.pdf ?? Buffer.alloc(0),
+    pdf: built.pdf,
     byteHash: built.byteHash,
     subject: `Everlin Morning Brief ${asOf}`,
   });
 
-  return { skipped: false, ok: true, asOf, byteHash: built.byteHash, deduped: built.deduped, delivery };
+  return { skipped: false, ok: true, asOf, byteHash: built.byteHash, deduped: false, delivery };
 }
 
 /** Vercel Cron issues GET. Also allow POST for manual trigger. */
