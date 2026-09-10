@@ -19,11 +19,12 @@ export const THREADS = SESSIONS;
 export function SessionList({ activeId }: { activeId: string }) {
   const router = useRouter();
 
-  // A fresh session route. Reuses the same /t/[id] surface. The id must be
-  // generated on CLICK, not at render: computing Date.now() during render makes
-  // the server and client produce different hrefs and triggers a hydration
-  // mismatch. Navigating from the click handler keeps SSR output deterministic.
-  function openNewSession() {
+  // Start a fresh chat with the core agent. Reuses the same /t/[id] surface. The
+  // id must be generated on CLICK, not at render: computing Date.now() during
+  // render makes the server and client produce different hrefs and triggers a
+  // hydration mismatch. Navigating from the click handler keeps SSR output
+  // deterministic.
+  function openNewChat() {
     router.push(`/t/session-${Date.now().toString(36)}`);
   }
 
@@ -32,11 +33,13 @@ export function SessionList({ activeId }: { activeId: string }) {
       <div className="px-3 pt-3">
         <button
           type="button"
-          onClick={openNewSession}
+          onClick={openNewChat}
+          aria-label="New chat with the core agent"
+          title="New chat with the core agent"
           className="group flex min-h-10 w-full items-center gap-2 rounded-md border border-white/12 px-3 py-2 text-[13px] font-medium text-sidebar-foreground/90 transition-colors hover:border-[var(--sidebar-accent)]/60 hover:text-sidebar-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sidebar-accent)]"
         >
           <PlusIcon className="size-4 text-[var(--sidebar-accent)]" />
-          New session
+          New chat
         </button>
       </div>
 

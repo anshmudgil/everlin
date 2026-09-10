@@ -16,38 +16,87 @@
  */
 import { z } from "zod";
 import { StateSchema, StateGraph, START, END } from "@langchain/langgraph";
-import { auCashRate, type Fact } from "@/lib/data-sources";
+import {
+  auCashRate,
+  auFxRate,
+  absSeries,
+  treasuryYield,
+  eiaOil,
+  type Fact,
+} from "@/lib/data-sources";
 import { validateOutput } from "@/lib/everlin/validate";
 import { DISCLAIMER, type MorningBrief } from "@/lib/everlin/schemas";
 
 /**
- * Graph state. `cashRate` is populated by retrieve; `brief` by assemble;
- * `ok`/`errors` by validate. Nullable/optional so partial updates flow.
+ * Graph state. `facts` is the full retrieved macro set (populated by retrieve);
+ * `brief` by assemble; `ok`/`errors` by validate.
  */
 const BriefState = new StateSchema({
   asOfDate: z.string(),
-  cashRate: z.custom<Fact>().nullable().default(null),
+  facts: z.array(z.custom<Fact>()).default(() => []),
   brief: z.unknown().nullable().default(null),
   ok: z.boolean().default(false),
   errors: z.array(z.string()).default(() => []),
 });
 
-/** retrieve: fetch the RBA cash rate Fact and stash it in state. */
-async function retrieve(state: typeof BriefState.State) {
-  const cashRate = await auCashRate();
-  return { cashRate };
+// Licensed-IP figures that have NO free, commercially-usable official source
+// (verified in docs/research/full-brief-data-sources.md). We surface them as
+// explicit not-obtained rows rather than fabricate or scrape — the trust-spine
+// rule. This keeps the dashboard honest about its coverage boundary.
+const LICENSED_GAPS: { label: string; note: string }[] = [
+  { label: "S&P/ASX 200 index", note: "Licensed index IP (S&P DJI/ASX) — no free commercial source. Not obtained." },
+  { label: "S&P 500 / Nasdaq / Dow", note: "Licensed index IP (S&P DJI) — reproduction requires a licence. Not obtained." },
+  { label: "VIX", note: "CBOE-copyrighted — no free commercial source. Not obtained." },
+  { label: "Gold (LBMA)", note: "ICE-administered licensed benchmark — no free commercial source. Not obtained." },
+];
+
+/**
+ * retrieve: pull the full free/official macro set in parallel. Each is a sourced
+ * Fact or a clean not-obtained; nothing here can throw the graph.
+ */
+async function retrieve() {
+  const [cashRate, fx, cpi, gdp, treasury, brent] = await Promise.all([
+    auCashRate(),
+    auFxRate(),
+    absSeries("CPI"),
+    absSeries("GDP"),
+    treasuryYield(),
+    eiaOil("brent"),
+  ]);
+  return { facts: [cashRate, fx, cpi, gdp, treasury, brent] };
 }
 
 /**
- * assemble: build the MorningBrief from the retrieved Fact.
- * The figure value is the Fact value verbatim — no model-authored numbers.
+ * assemble: build the macro-dashboard MorningBrief from the retrieved Facts.
+ * The model writes NO numbers — every figure value is a Fact value verbatim,
+ * and the licensed gaps are explicit not-obtained rows.
  */
 function assemble(state: typeof BriefState.State) {
   const asOf = state.asOfDate;
-  const fact = state.cashRate;
-  // Prefer the Fact's own unit for prose; fall back cleanly if not obtained.
-  const rateDisplay =
-    fact && fact.value !== null ? `${fact.value}${fact.unit ? ` ${fact.unit}` : ""}` : "not obtained";
+  const facts = state.facts;
+  const byLabelHas = (frag: string) =>
+    facts.find((f) => f.label.toLowerCase().includes(frag) && f.value !== null);
+  const cash = byLabelHas("cash rate");
+
+  const figures = [
+    ...facts.map(factToFigure),
+    ...LICENSED_GAPS.map(
+      (g): MorningBrief["figures"][number] => ({
+        label: g.label,
+        value: null,
+        unit: "",
+        calcKey: null,
+        source: null,
+        sourceUrl: null,
+        asOf: null,
+        missing: true,
+        note: g.note,
+      }),
+    ),
+  ];
+
+  const obtained = facts.filter((f) => f.value !== null).length;
+  const cashDisplay = cash ? `${cash.value}${cash.unit ? ` ${cash.unit}` : ""}` : "not obtained";
 
   const brief: MorningBrief = {
     envelope: {
@@ -58,12 +107,16 @@ function assemble(state: typeof BriefState.State) {
       preparedBy: null,
     },
     asOf,
-    executiveSummary: `As of ${asOf}, the RBA cash rate target is ${rateDisplay}.`,
-    figures: [factToFigure(fact)],
+    executiveSummary:
+      `Macro dashboard as of ${asOf}. RBA cash rate ${cashDisplay}. ` +
+      `${obtained} of ${facts.length} free/official series obtained; index, equity, VIX and gold ` +
+      `figures require a licensed data source and are marked not obtained.`,
+    figures,
     claims: [],
     escalations: [],
     questionForIC:
-      "Given the current RBA cash rate, does the IC want to revisit the cash allocation before the next meeting?",
+      "Given the current RBA cash rate and the flat/softening macro reads, does the IC want to revisit " +
+      "the cash and duration allocation before the next meeting?",
     disclaimer: DISCLAIMER,
   };
 
@@ -74,7 +127,7 @@ function assemble(state: typeof BriefState.State) {
 function factToFigure(fact: Fact | null): MorningBrief["figures"][number] {
   if (!fact || fact.value === null || typeof fact.value !== "number") {
     return {
-      label: fact?.label ?? "RBA cash rate target",
+      label: fact?.label ?? "figure",
       value: null,
       unit: fact?.unit ?? "",
       calcKey: null,
@@ -82,7 +135,7 @@ function factToFigure(fact: Fact | null): MorningBrief["figures"][number] {
       sourceUrl: null,
       asOf: null,
       missing: true,
-      note: fact?.note ?? "Cash rate not obtained.",
+      note: fact?.note ?? "Not obtained.",
     };
   }
   return {

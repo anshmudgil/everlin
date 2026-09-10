@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useChat } from "@ai-sdk/react";
+import type { FileUIPart } from "ai";
 import {
   Conversation,
   ConversationContent,
@@ -16,12 +17,34 @@ import {
 } from "@/components/ai-elements/message";
 import {
   PromptInput,
+  PromptInputProvider,
   PromptInputBody,
   PromptInputTextarea,
   PromptInputFooter,
   PromptInputSubmit,
+  PromptInputButton,
+  usePromptInputController,
+  usePromptInputAttachments,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+import {
+  Attachments,
+  Attachment,
+  AttachmentPreview,
+  AttachmentInfo,
+  AttachmentRemove,
+} from "@/components/ai-elements/attachments";
+import {
+  Command,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@/components/ui/popover";
 import {
   Artifact,
   ArtifactHeader,
@@ -38,7 +61,14 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { DownloadIcon, PencilIcon, MenuIcon, XIcon, PanelRightIcon } from "lucide-react";
+import {
+  DownloadIcon,
+  PencilIcon,
+  MenuIcon,
+  XIcon,
+  PanelRightIcon,
+  PaperclipIcon,
+} from "lucide-react";
 import { SessionList, SESSIONS } from "@/components/session-list";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -49,7 +79,6 @@ const artifactCache = new Map<string, BriefArtifact>();
 // localStorage keys for persisted UI prefs (read in an effect, never at render → no
 // hydration mismatch). See docs/specs/ui-canvas-increment.md risk note.
 const LS_CANVAS = "everlin.canvasOpen";
-const LS_TIER = "everlin.icGrade";
 
 // Kept for backwards-compat: some routes/imports still reference THREADS.
 export const THREADS = SESSIONS;
@@ -63,9 +92,13 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-// One assistant. Both tiers currently run the same model; the toggle flips the
-// POST body `mode` so the route can re-split to premium models later.
-const ANALYST = { short: "EA", name: "Everlin Analyst" };
+// A small static command palette. Typing "/" at the start of an empty input
+// opens this list; selecting an item fills the input with the command text.
+const SLASH_COMMANDS = [
+  { cmd: "/brief", label: "Generate the daily brief" },
+  { cmd: "/weekly", label: "Weekly IC brief" },
+  { cmd: "/macro", label: "Macro dashboard" },
+];
 
 // The agent's generated brief becomes an artifact in the canvas. Here it is detected
 // from a data part the agent stream can emit (data-artifact); until the model emits one,
@@ -121,8 +154,119 @@ function SidebarInner({ threadId }: { threadId: string }) {
   );
 }
 
+// Paperclip attach button + selected-file chips. Lives inside PromptInputProvider
+// so it can read/mutate the shared attachments context. Files added here flow into
+// PromptInput's onSubmit as FileUIPart[] (blob→data URL conversion is handled there).
+function AttachControls() {
+  const attachments = usePromptInputAttachments();
+  return (
+    <>
+      {attachments.files.length > 0 && (
+        <Attachments variant="inline" className="px-1 pb-2">
+          {attachments.files.map((file) => (
+            <Attachment
+              key={file.id}
+              data={file}
+              onRemove={() => attachments.remove(file.id)}
+            >
+              <AttachmentPreview />
+              <AttachmentInfo />
+              <AttachmentRemove />
+            </Attachment>
+          ))}
+        </Attachments>
+      )}
+      <PromptInputButton
+        onClick={() => attachments.openFileDialog()}
+        tooltip="Attach a file"
+        aria-label="Attach a file"
+      >
+        <PaperclipIcon className="size-4" />
+      </PromptInputButton>
+    </>
+  );
+}
+
+// The full chat composer: controlled textarea (via PromptInputProvider), a "/"
+// slash-command menu shown when the input starts with "/", a file-attach button,
+// and the submit button. Kept as its own component so it can consume the provider
+// context hooks (usePromptInputController / usePromptInputAttachments).
+function Composer({
+  status,
+  onSubmit,
+}: {
+  status: ReturnType<typeof useChat>["status"];
+  onSubmit: (msg: PromptInputMessage) => void;
+}) {
+  const controller = usePromptInputController();
+  const value = controller.textInput.value;
+
+  // Show the command menu only when the user types "/" at the start of the input.
+  // Trailing filter after the slash narrows the list (e.g. "/we" → Weekly).
+  const slashOpen = value.startsWith("/");
+  const filter = slashOpen ? value.slice(1).toLowerCase() : "";
+  const filtered = SLASH_COMMANDS.filter(
+    (c) =>
+      c.cmd.slice(1).toLowerCase().startsWith(filter) ||
+      c.label.toLowerCase().includes(filter),
+  );
+  const showMenu = slashOpen && filtered.length > 0;
+
+  const pickCommand = (cmd: string) => {
+    // Fill the input with the command text (a trailing space lets the user keep typing).
+    controller.textInput.setInput(`${cmd} `);
+  };
+
+  return (
+    <Popover open={showMenu}>
+      <PopoverAnchor asChild>
+        <PromptInput onSubmit={onSubmit} multiple>
+          <PromptInputBody>
+            <PromptInputTextarea
+              placeholder="Message the assistant…  (⏎ send)"
+              onKeyDown={(e) => {
+                // Esc closes the slash menu by clearing the leading slash.
+                if (e.key === "Escape" && slashOpen) {
+                  e.preventDefault();
+                  controller.textInput.setInput("");
+                }
+              }}
+            />
+          </PromptInputBody>
+          <PromptInputFooter>
+            <AttachControls />
+            <PromptInputSubmit status={status} />
+          </PromptInputFooter>
+        </PromptInput>
+      </PopoverAnchor>
+      <PopoverContent
+        align="start"
+        side="top"
+        className="w-72 p-0"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <Command shouldFilter={false}>
+          <CommandList>
+            <CommandGroup heading="Commands">
+              {filtered.map((c) => (
+                <CommandItem
+                  key={c.cmd}
+                  value={c.cmd}
+                  onSelect={() => pickCommand(c.cmd)}
+                >
+                  <span className="font-medium">{c.cmd}</span>
+                  <span className="ml-2 text-muted-foreground">{c.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function EverlinWorkspace({ threadId }: { threadId: string }) {
-  const [icGrade, setIcGrade] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   // Manual canvas toggle. Default closed; hydrated from localStorage in an effect
   // (render-time localStorage would diverge server/client → hydration mismatch).
@@ -148,20 +292,16 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
     if (hydratedPrefs.current) return;
     hydratedPrefs.current = true;
     let canvas = false;
-    let tier = false;
     try {
       canvas = localStorage.getItem(LS_CANVAS) === "1";
-      tier = localStorage.getItem(LS_TIER) === "1";
     } catch {}
     // Schedule the state application in a microtask so it lands after the commit,
     // not synchronously inside the effect body (avoids the cascading-render lint).
     queueMicrotask(() => {
       if (canvas) setCanvasManuallyOpen(true);
-      if (tier) setIcGrade(true);
     });
   }, []);
 
-  const session = SESSIONS.find((x) => x.id === threadId);
   const streaming = status !== "ready" && status !== "error";
 
   // Canvas is open when a brief exists OR the user opened it manually.
@@ -177,19 +317,15 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
     });
   }, []);
 
-  const toggleTier = useCallback(() => {
-    setIcGrade((v) => {
-      const next = !v;
-      try {
-        localStorage.setItem(LS_TIER, next ? "1" : "0");
-      } catch {}
-      return next;
-    });
-  }, []);
-
   const onSubmit = (msg: PromptInputMessage) => {
-    if (!msg.text?.trim()) return;
-    sendMessage({ text: msg.text }, { body: { mode: icGrade ? "ic" : "routine" } });
+    if (!msg.text?.trim() && (!msg.files || msg.files.length === 0)) return;
+    // AI SDK v7: sendMessage accepts { text, files } where files is FileUIPart[].
+    // PromptInput has already converted attachment blob URLs to data URLs, so the
+    // file parts are self-contained and travel with the message to the route.
+    sendMessage({
+      text: msg.text ?? "",
+      files: msg.files as FileUIPart[] | undefined,
+    });
   };
 
   // Export the brief as a real PDF via the browser's print pipeline (no extra dep):
@@ -279,30 +415,11 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
           >
             <MenuIcon className="size-4" />
           </button>
-          <span className="flex size-6 items-center justify-center rounded-md bg-primary text-[11px] font-bold text-primary-foreground">
-            {ANALYST.short}
-          </span>
-          <span className="text-[15px] font-semibold">{ANALYST.name}</span>
-          {session && (
-            <span className="truncate text-xs text-muted-foreground max-sm:hidden">
-              · {session.t}
-            </span>
-          )}
-          <button
-            onClick={toggleTier}
-            className={`ml-auto rounded-md border px-2.5 py-1 text-[10px] tracking-wide transition-colors ${
-              icGrade
-                ? "border-accent bg-accent text-accent-foreground"
-                : "border-border text-muted-foreground hover:text-foreground"
-            }`}
-            title="IC-grade vs routine tier (both on Qwen3.7 Flash for now; re-split to premium models later)"
-          >
-            {icGrade ? "IC-GRADE" : "ROUTINE"}
-          </button>
+          <span className="text-[15px] font-semibold">Assistant</span>
           <button
             onClick={toggleCanvas}
             aria-pressed={canvasManuallyOpen}
-            className={`flex size-8 items-center justify-center rounded-md border transition-colors max-md:hidden ${
+            className={`ml-auto flex size-8 items-center justify-center rounded-md border transition-colors max-md:hidden ${
               canvasOpen
                 ? "border-accent text-accent"
                 : "border-border text-muted-foreground hover:text-foreground"
@@ -317,8 +434,8 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
           <ConversationContent className="mx-auto w-full max-w-2xl">
             {messages.length === 0 && (
               <ConversationEmptyState
-                title="Brief the Everlin Analyst"
-                description="Ask for this week's IC brief, a screening lean, or challenge a call. Every figure is sourced or marked not-obtained."
+                title="How can I help?"
+                description="Ask anything, or type / for commands."
               />
             )}
             {messages.map((message) => (
@@ -378,17 +495,9 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
 
         <div className="border-t border-border p-4">
           <div className="mx-auto w-full max-w-2xl">
-            <PromptInput onSubmit={onSubmit}>
-              <PromptInputBody>
-                <PromptInputTextarea placeholder="Reply to the Everlin Analyst… (⏎ send, ⇧⏎ newline)" />
-              </PromptInputBody>
-              <PromptInputFooter>
-                <span className="px-1 text-[11px] text-muted-foreground">
-                  Challenge a call and it holds unless you bring new evidence.
-                </span>
-                <PromptInputSubmit status={status} />
-              </PromptInputFooter>
-            </PromptInput>
+            <PromptInputProvider>
+              <Composer status={status} onSubmit={onSubmit} />
+            </PromptInputProvider>
           </div>
         </div>
       </section>
