@@ -12,6 +12,8 @@ import {
 import { z } from "zod";
 import { edgarConcept, treasuryYield, auCashRate, absSeries } from "@/lib/data-sources";
 import { route, renderPlan } from "@/lib/everlin/router";
+import { proposeSkill } from "@/lib/everlin/propose-skill";
+import { listProposals, approveProposal } from "@/lib/everlin/skill-proposals";
 import {
   marginOfSafety,
   feeDrag,
@@ -58,7 +60,7 @@ Coverage boundary: RBA cash rate and ABS CPI/GDP ARE retrievable — use those t
 
 Base currency AUD. Two lenses: Buffett (core/value) and Wood/Ark (growth). Label which you apply.
 
-SKILL ROUTING: For any non-trivial request, first call planSkills with the user's request to get the ordered Everlin skill plan, then follow that plan. Do not invent skills outside the plan.
+SKILL ROUTING: For any non-trivial request, first call planSkills with the user's request to get the ordered Everlin skill plan, then follow that plan. Do not invent skills outside the plan. If planSkills reports the request is UNROUTED (a genuine capability gap within Everlin's scope), you MAY call proposeSkill to author a new skill — but that only files a PROPOSAL for review; it never grants the skill. Never claim a proposed skill is available until it is approved.
 
 DETERMINISTIC CALC RULE (critical, extends the retrieval rule): You must NEVER do financial arithmetic yourself. To state a margin of safety, fee load, development margin, feasibility-stress result, or going-concern yield, call the matching calc tool and cite the returned calcKey inline (e.g. "all-in fee 5.00% p.a. *(calc key: FEE_DECOMP-…)*"). The calc tools also return flags (e.g. fee load above the 2.5% ceiling) — surface every flag. A number without a calcKey or a retrieval source is a failed output.`;
 
@@ -228,6 +230,42 @@ function makeTools(writer: UIMessageStreamWriter<EverlinUIMessage>) {
       "Deterministic going-concern yield % from NOI and asset value. Flags outside the 7-9% net-unlevered band. Never compute this yourself.",
     inputSchema: z.object({ noi: z.number(), assetValue: z.number() }),
     execute: async ({ noi, assetValue }) => goingConcernYield(noi, assetValue),
+  }),
+  proposeSkill: tool({
+    description:
+      "When a request needs an Everlin capability that no existing skill covers, AUTHOR a new skill as a PROPOSAL. This does NOT grant the skill — it lands inert in a review queue and must pass an automated safety gate and human (Jordan Lin) approval before it can ever run. Call this only for genuine capability gaps in Everlin's scope (brief variants, analysis templates, retrieval wrappers).",
+    inputSchema: z.object({
+      gap: z.string().describe("the user request describing the capability gap"),
+    }),
+    execute: async ({ gap }) => {
+      const r = await proposeSkill(gap, {
+        graphTraceId: crypto.randomUUID(),
+        proposedAt: new Date().toISOString(),
+      });
+      if (!r.authored) return { authored: false, reason: r.reason };
+      return {
+        authored: true,
+        proposalId: r.proposal.proposalId,
+        name: r.proposal.name,
+        status: r.proposal.status, // PENDING_REVIEW or REJECTED — set by the gate
+        rejectReasons: r.proposal.validatorReport.rejectReasons,
+        note: r.proposal.status === "PENDING_REVIEW"
+          ? "Proposed and passed the automated gate. Awaiting Jordan Lin's approval before it becomes usable."
+          : "Rejected by the automated safety gate. Not usable.",
+      };
+    },
+  }),
+  listSkillProposals: tool({
+    description: "List proposed skills and their status (PROPOSED/PENDING_REVIEW/REJECTED/APPROVED) — the review queue.",
+    inputSchema: z.object({}),
+    execute: async () =>
+      listProposals().map((p) => ({ proposalId: p.proposalId, name: p.name, status: p.status, useCase: p.useCase })),
+  }),
+  approveSkillProposal: tool({
+    description:
+      "Approve a PENDING_REVIEW skill proposal so it becomes routable. This is Jordan Lin's governance act — the human gate. Only a PENDING_REVIEW proposal can be approved; a gate-rejected proposal can never be approved.",
+    inputSchema: z.object({ proposalId: z.string() }),
+    execute: async ({ proposalId }) => approveProposal(proposalId),
   }),
   } as const;
 }
