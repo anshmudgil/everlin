@@ -18,6 +18,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const asOf = url.searchParams.get("asOf") ?? "";
   const force = url.searchParams.get("force") === "1";
+  const narrativeLlm = url.searchParams.get("narrative") === "llm";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
     return NextResponse.json({ error: "asOf=YYYY-MM-DD required" }, { status: 400 });
   }
@@ -25,8 +26,8 @@ export async function GET(req: Request) {
   const store = getBriefStore();
   // Run the full headless pipeline (retrieve -> reason -> assemble -> render -> store).
   // It returns the PDF bytes directly, so we never round-trip through store.get()
-  // (which is a network call in prod).
-  const result = await buildDailyBriefHeadless(asOf, { store, force, nowIso: new Date().toISOString() });
+  // (which is a network call in prod). narrative=llm opts into the gated LLM prose.
+  const result = await buildDailyBriefHeadless(asOf, { store, force, nowIso: new Date().toISOString(), narrativeLlm });
   if (!result.ok) {
     return NextResponse.json({ error: "brief build failed", details: result.errors }, { status: 422 });
   }

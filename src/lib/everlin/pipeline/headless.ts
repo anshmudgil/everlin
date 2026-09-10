@@ -21,6 +21,7 @@ import {
   type Fact,
 } from "@/lib/data-sources";
 import { buildReasoning } from "@/lib/everlin/reasoning";
+import { buildNarrative } from "@/lib/everlin/narrative/engine";
 import { renderBriefPdf } from "@/lib/everlin/pdf/render";
 import { validateOutput } from "@/lib/everlin/validate";
 import { DISCLAIMER, MorningBrief } from "@/lib/everlin/schemas";
@@ -54,7 +55,7 @@ export type HeadlessResult =
 
 export async function buildDailyBriefHeadless(
   asOf: string,
-  opts: { store?: BriefStore; force?: boolean; nowIso: string } = { nowIso: "1970-01-01T00:00:00Z" },
+  opts: { store?: BriefStore; force?: boolean; nowIso: string; narrativeLlm?: boolean } = { nowIso: "1970-01-01T00:00:00Z" },
 ): Promise<HeadlessResult> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
     return { ok: false, date: asOf, errors: [`asOf must be YYYY-MM-DD, got '${asOf}'`] };
@@ -88,7 +89,13 @@ export async function buildDailyBriefHeadless(
       label: g.label, value: null, unit: "", calcKey: null, source: null, sourceUrl: null, asOf: null, missing: true, note: g.note,
     })),
   ];
-  const sections = buildReasoning(facts);
+  // Narrative: deterministic prose by default (byte-stable). When narrativeLlm is
+  // on, buildNarrative upgrades interpretation prose via the gated LLM and falls
+  // back to the deterministic prose on any gate failure — so the facts + section
+  // frame stay deterministic and only the (gated) analytical sentence varies.
+  const narrative = await buildNarrative(facts, { allowLlm: opts.narrativeLlm });
+  const sections = narrative.sections;
+  void buildReasoning; // deterministic builder still used inside buildNarrative
   const obtained = facts.filter((f) => f.value !== null).length;
   const cashDisplay = cash.value !== null ? `${cash.value}${cash.unit ? ` ${cash.unit}` : ""}` : "not obtained";
 
