@@ -32,7 +32,7 @@ export function LevelsBarChart({ brief }: { brief: MorningBrief }) {
         const barW = Math.round((Math.abs(v) / max) * barMaxW);
         const y = i * rowH + 2;
         return (
-          <React.Fragment key={r.label}>
+          <React.Fragment key={`${i}-${r.label}`}>
             <SvgText x={0} y={y + 7} style={{ fontSize: 5.5, fill: COLORS.ink }}>
               {r.label.slice(0, 34)}
             </SvgText>

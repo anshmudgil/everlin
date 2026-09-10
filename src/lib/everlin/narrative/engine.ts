@@ -35,13 +35,23 @@ const InterpretationSchema = z.object({
   ),
 });
 
-/** Does interpretation prose smuggle in a number not present in its facts? */
+/** Parse the distinct numeric VALUES out of text (thousands separators stripped). */
+function numericValues(text: string): number[] {
+  const raw = text.match(/-?\d[\d,]*(?:\.\d+)?/g) ?? [];
+  return raw.map((s) => Number(s.replace(/,/g, ""))).filter((n) => Number.isFinite(n));
+}
+
+/**
+ * Does interpretation prose smuggle in a number not present in its facts?
+ * Compares NUMERIC VALUES, not substrings — so "35 basis points" is NOT excused
+ * by the "4.35" in a fact (the old substring check let that through). Every
+ * number the interpretation states must equal a number in a sourced fact.
+ */
 function introducesUnsourcedNumber(interpretation: string, facts: { text: string }[]): boolean {
-  const nums = interpretation.match(/\d[\d,.]*/g) ?? [];
-  if (nums.length === 0) return false;
-  const factBlob = facts.map((f) => f.text).join(" ");
-  // Every number in the interpretation must also appear in a sourced fact.
-  return nums.some((n) => !factBlob.includes(n));
+  const interpNums = numericValues(interpretation);
+  if (interpNums.length === 0) return false;
+  const factNums = new Set(numericValues(facts.map((f) => f.text).join(" ")));
+  return interpNums.some((n) => !factNums.has(n));
 }
 
 export type NarrativeResult = {

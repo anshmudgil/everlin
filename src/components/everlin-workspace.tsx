@@ -106,19 +106,30 @@ const SLASH_COMMANDS = [
 // the canvas shows the empty/awaiting state. This is the streaming-artifact seam.
 type BriefArtifact = { title: string; ref: string; body: string };
 
-// Map a brief docId (EVL-DAILY-YYYY-MM-DD, EVL-WEEKLY-YYYYMMDD, ...) to the
-// deterministic PDF route. Falls back to today if no date is embedded in the ref.
-function briefPdfUrl(ref: string): string {
-  // EVL-DAILY-2026-09-07 -> 2026-09-07
-  const dash = ref.match(/(\d{4}-\d{2}-\d{2})/);
-  // EVL-WEEKLY-08092026 -> DDMMYYYY -> YYYY-MM-DD
-  const compact = ref.match(/(\d{2})(\d{2})(\d{4})$/);
-  const asOf = dash
-    ? dash[1]
-    : compact
-      ? `${compact[3]}-${compact[2]}-${compact[1]}`
-      : new Date().toISOString().slice(0, 10);
-  return `/api/everlin/brief-pdf?asOf=${asOf}`;
+// Map a brief docId to the PDF route's asOf date, or null if the ref carries no
+// parseable date. Anchored to the documented docId shapes and range-validated so
+// a malformed ref can't produce a bad URL. No wall-clock fallback (that would be
+// non-deterministic and could show the wrong day's brief).
+function briefAsOf(ref: string): string | null {
+  const daily = ref.match(/^EVL-DAILY-(\d{4})-(\d{2})-(\d{2})$/);
+  const weekly = ref.match(/^EVL-WEEKLY-(\d{2})(\d{2})(\d{4})$/); // DDMMYYYY
+  let y: number, m: number, d: number;
+  if (daily) {
+    [, , , ] = daily;
+    y = +daily[1]; m = +daily[2]; d = +daily[3];
+  } else if (weekly) {
+    d = +weekly[1]; m = +weekly[2]; y = +weekly[3];
+  } else {
+    return null;
+  }
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
+
+function briefPdfUrl(ref: string): string | null {
+  const asOf = briefAsOf(ref);
+  return asOf ? `/api/everlin/brief-pdf?asOf=${asOf}` : null;
 }
 
 function extractArtifact(
@@ -576,28 +587,33 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
               <ArtifactContent className="flex-1 overflow-y-auto scroll-smooth">
                 {artifact ? (
                   canvasView === "pdf" ? (
-                    // Rendered deterministic PDF, embedded from the brief-pdf route.
-                    // Sandboxed (same-origin) — the PDF is served inline.
-                    <object
-                      data={briefPdfUrl(artifact.ref)}
-                      type="application/pdf"
-                      title="Everlin brief PDF"
-                      className="h-full w-full border-0"
-                    >
-                      {/* Fallback if the browser has no inline PDF viewer. */}
+                    briefPdfUrl(artifact.ref) ? (
+                      // Rendered deterministic PDF, embedded from the brief-pdf route.
+                      <object
+                        data={briefPdfUrl(artifact.ref)!}
+                        type="application/pdf"
+                        title="Everlin brief PDF"
+                        className="h-full w-full border-0"
+                      >
+                        {/* Fallback if the browser has no inline PDF viewer. */}
+                        <div className="p-4 text-sm text-muted-foreground">
+                          Your browser can’t display the PDF inline.{" "}
+                          <a
+                            href={briefPdfUrl(artifact.ref)!}
+                            className="text-accent underline"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open the brief PDF
+                          </a>
+                          .
+                        </div>
+                      </object>
+                    ) : (
                       <div className="p-4 text-sm text-muted-foreground">
-                        Your browser can’t display the PDF inline.{" "}
-                        <a
-                          href={briefPdfUrl(artifact.ref)}
-                          className="text-accent underline"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open the brief PDF
-                        </a>
-                        .
+                        No PDF available for this document reference.
                       </div>
-                    </object>
+                    )
                   ) : (
                     // Styled, scrollable document view. Print target for Export-PDF.
                     <article

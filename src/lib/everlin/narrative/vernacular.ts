@@ -7,19 +7,22 @@
  */
 
 // Hype / AI-slop / marketing words that never appear in the golden briefs.
-const BANNED = [
+// Matched as WHOLE WORDS (word boundaries) — "leverage" must not fire on the
+// legitimate finance term "leveraged"/"deleverage", so it is dropped from the
+// single-word list (too false-positive-prone) and only the phrase forms remain.
+const BANNED_WORDS = [
   "delve",
-  "leverage", // as a verb; the briefs say "support"/"drive"
   "unlock",
-  "game-chang",
-  "revolution",
   "seamless",
-  "cutting-edge",
   "supercharge",
   "unprecedented",
-  "robust",
   "synergy",
   "paradigm",
+];
+// Multi-word hype phrases (matched as substrings — they are unambiguous).
+const BANNED_PHRASES = [
+  "game-chang",
+  "cutting-edge",
   "in today's fast-paced",
   "in conclusion",
 ];
@@ -42,18 +45,21 @@ export function lintVernacular(text: string, opts: { requireSourceBrackets?: boo
   const findings: string[] = [];
   const lower = text.toLowerCase();
 
-  // 1. No banned hype/slop words.
-  const bannedHit = BANNED.filter((w) => lower.includes(w));
+  // 1. No banned hype/slop words (whole-word) or phrases (substring).
+  const wordHit = BANNED_WORDS.filter((w) => new RegExp(`\\b${w}\\b`, "i").test(text));
+  const phraseHit = BANNED_PHRASES.filter((p) => lower.includes(p));
+  const bannedHit = [...wordHit, ...phraseHit];
   if (bannedHit.length) findings.push(`banned register words: ${bannedHit.join(", ")}`);
 
   // 2. No emoji.
   const hasEmoji = EMOJI_RE.test(text);
   if (hasEmoji) findings.push("contains emoji (house style uses none)");
 
-  // 3. No US-spelling tells where the golden uses AU/British. (Soft: flag the
-  //    most common divergences that would read as off-brand.)
-  const usSpellings = ["favorite", "color ", "analyze", "behavior", "defense", "toward the"];
-  const usHit = usSpellings.filter((w) => lower.includes(w));
+  // 3. No US-spelling tells where the golden uses AU/British. Whole-word only —
+  //    "toward the" was dropped (the golden itself uses "toward"), "color" as a
+  //    bare word only (not inside "colored"/"discolored").
+  const usSpellings = ["favorite", "color", "analyze", "behavior", "defense"];
+  const usHit = usSpellings.filter((w) => new RegExp(`\\b${w}\\b`, "i").test(text));
   if (usHit.length) findings.push(`US spelling (prefer AU/British): ${usHit.join(", ")}`);
 
   // 4. Source-bracket discipline (only when asserted, e.g. a FACTS block).

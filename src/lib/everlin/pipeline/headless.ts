@@ -20,7 +20,6 @@ import {
   eiaOil,
   type Fact,
 } from "@/lib/data-sources";
-import { buildReasoning } from "@/lib/everlin/reasoning";
 import { buildNarrative } from "@/lib/everlin/narrative/engine";
 import { renderBriefPdf } from "@/lib/everlin/pdf/render";
 import { validateOutput } from "@/lib/everlin/validate";
@@ -95,7 +94,6 @@ export async function buildDailyBriefHeadless(
   // frame stay deterministic and only the (gated) analytical sentence varies.
   const narrative = await buildNarrative(facts, { allowLlm: opts.narrativeLlm });
   const sections = narrative.sections;
-  void buildReasoning; // deterministic builder still used inside buildNarrative
   const obtained = facts.filter((f) => f.value !== null).length;
   const cashDisplay = cash.value !== null ? `${cash.value}${cash.unit ? ` ${cash.unit}` : ""}` : "not obtained";
 
