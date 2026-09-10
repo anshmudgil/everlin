@@ -13,6 +13,7 @@
     "@langchain/core": "1.2.9",
     "@langchain/langgraph": "1.4.14",
     "@radix-ui/react-use-controllable-state": "^1.2.6",
+    "@react-pdf/renderer": "^4.9.0",
     "@rive-app/react-webgl2": "^4.34.1",
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
