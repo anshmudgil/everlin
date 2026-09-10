@@ -64,6 +64,7 @@ import {
 import {
   DownloadIcon,
   PencilIcon,
+  FileTextIcon,
   MenuIcon,
   XIcon,
   PanelRightIcon,
@@ -104,6 +105,21 @@ const SLASH_COMMANDS = [
 // from a data part the agent stream can emit (data-artifact); until the model emits one,
 // the canvas shows the empty/awaiting state. This is the streaming-artifact seam.
 type BriefArtifact = { title: string; ref: string; body: string };
+
+// Map a brief docId (EVL-DAILY-YYYY-MM-DD, EVL-WEEKLY-YYYYMMDD, ...) to the
+// deterministic PDF route. Falls back to today if no date is embedded in the ref.
+function briefPdfUrl(ref: string): string {
+  // EVL-DAILY-2026-09-07 -> 2026-09-07
+  const dash = ref.match(/(\d{4}-\d{2}-\d{2})/);
+  // EVL-WEEKLY-08092026 -> DDMMYYYY -> YYYY-MM-DD
+  const compact = ref.match(/(\d{2})(\d{2})(\d{4})$/);
+  const asOf = dash
+    ? dash[1]
+    : compact
+      ? `${compact[3]}-${compact[2]}-${compact[1]}`
+      : new Date().toISOString().slice(0, 10);
+  return `/api/everlin/brief-pdf?asOf=${asOf}`;
+}
 
 function extractArtifact(
   messages: ReturnType<typeof useChat>["messages"],
@@ -271,6 +287,8 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
   // Manual canvas toggle. Default closed; hydrated from localStorage in an effect
   // (render-time localStorage would diverge server/client → hydration mismatch).
   const [canvasManuallyOpen, setCanvasManuallyOpen] = useState(false);
+  // Canvas view mode: the styled HTML document, or the rendered deterministic PDF.
+  const [canvasView, setCanvasView] = useState<"html" | "pdf">("html");
   // key useChat by thread so switching threads is a distinct conversation
   const { messages, sendMessage, status } = useChat({ id: threadId });
 
@@ -532,6 +550,14 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
                 </div>
                 <ArtifactActions>
                   <ArtifactAction icon={PencilIcon} tooltip="Edit" label="Edit" />
+                  {/* Toggle the styled HTML view vs the rendered deterministic PDF. */}
+                  <ArtifactAction
+                    icon={FileTextIcon}
+                    tooltip={canvasView === "pdf" ? "Show document view" : "Show rendered PDF"}
+                    label="Toggle PDF"
+                    onClick={() => setCanvasView((v) => (v === "pdf" ? "html" : "pdf"))}
+                    disabled={!artifact}
+                  />
                   <ArtifactAction
                     icon={DownloadIcon}
                     tooltip="Export PDF"
@@ -549,13 +575,38 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
               </ArtifactHeader>
               <ArtifactContent className="flex-1 overflow-y-auto scroll-smooth">
                 {artifact ? (
-                  // Styled, scrollable document view. Print target for Export-PDF.
-                  <article
-                    ref={docRef}
-                    className="mx-auto max-w-prose leading-relaxed [&_h1]:mt-0 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-6 [&_h2]:text-base [&_h2]:font-semibold [&_p]:my-3 [&_.tabular]:tabular-nums"
-                  >
-                    <MessageResponse>{artifact.body}</MessageResponse>
-                  </article>
+                  canvasView === "pdf" ? (
+                    // Rendered deterministic PDF, embedded from the brief-pdf route.
+                    // Sandboxed (same-origin) — the PDF is served inline.
+                    <object
+                      data={briefPdfUrl(artifact.ref)}
+                      type="application/pdf"
+                      title="Everlin brief PDF"
+                      className="h-full w-full border-0"
+                    >
+                      {/* Fallback if the browser has no inline PDF viewer. */}
+                      <div className="p-4 text-sm text-muted-foreground">
+                        Your browser can’t display the PDF inline.{" "}
+                        <a
+                          href={briefPdfUrl(artifact.ref)}
+                          className="text-accent underline"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open the brief PDF
+                        </a>
+                        .
+                      </div>
+                    </object>
+                  ) : (
+                    // Styled, scrollable document view. Print target for Export-PDF.
+                    <article
+                      ref={docRef}
+                      className="mx-auto max-w-prose leading-relaxed [&_h1]:mt-0 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-6 [&_h2]:text-base [&_h2]:font-semibold [&_p]:my-3 [&_.tabular]:tabular-nums"
+                    >
+                      <MessageResponse>{artifact.body}</MessageResponse>
+                    </article>
+                  )
                 ) : (
                   <div className="text-sm text-muted-foreground">
                     <p className="text-base font-semibold text-foreground">No artifact yet.</p>

@@ -214,6 +214,7 @@ export function BriefDocument({ brief }: { brief: MorningBrief }) {
       // normalizer stays as a second line of defence for the random /ID.
       creationDate={new Date(0)}
     >
+      {/* PAGE 1 — masthead, coverage, markets-at-a-glance, chart, markets table. */}
       <Page size={PAGE.size} style={s.page} wrap>
         <Masthead />
         <Text style={s.coverage}>
@@ -223,9 +224,21 @@ export function BriefDocument({ brief }: { brief: MorningBrief }) {
         <MarketsAtAGlance brief={brief} />
         <LatestLevelsChart brief={brief} />
         <MarketsTable brief={brief} />
+        <Footer />
+      </Page>
+
+      {/* PAGE 2 — the analytical core: THE ONE THING, WORLD & MACRO, AUSTRALIA. */}
+      <Page size={PAGE.size} style={s.page} wrap>
+        <Masthead />
         <ReasonedSection brief={brief} section="the-one-thing" title="THE ONE THING" />
         <ReasonedSection brief={brief} section="world-and-macro" title="WORLD & MACRO" />
         <ReasonedSection brief={brief} section="australia" title="AUSTRALIA" />
+        <Footer />
+      </Page>
+
+      {/* PAGE 3 — regional + portfolio + the IC question. */}
+      <Page size={PAGE.size} style={s.page} wrap>
+        <Masthead />
         <ReasonedSection brief={brief} section="taiwan" title="TAIWAN" />
         <ReasonedSection brief={brief} section="portfolio-watch" title="PORTFOLIO WATCH" />
         <Band>ONE QUESTION FOR THE IC</Band>
