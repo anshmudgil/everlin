@@ -1,25 +1,38 @@
 import type { Metadata } from "next";
-import { Fraunces, Newsreader, IBM_Plex_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-const display = Fraunces({ variable: "--font-heading", subsets: ["latin"], weight: ["400", "600", "700"] });
-const serif = Newsreader({ variable: "--font-sans", subsets: ["latin"], weight: ["400", "500", "600"] });
-const mono = IBM_Plex_Mono({ variable: "--font-geist-mono", subsets: ["latin"], weight: ["400", "500", "600"] });
+// Inter is the single typeface across the whole app — UI, data, brief titles, doc-ids.
+// One family, no serif/mono split. tabular-nums (globals.css) keeps figures aligned.
+const sans = Inter({
+  variable: "--font-sans",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 
 export const metadata: Metadata = {
-  title: "Everlin — Agent Workspace",
-  description: "Everlin Family Office AI agents — Investment & Property analysts.",
+  title: "Everlin — Analyst Workspace",
+  description: "Everlin Family Office AI analyst — sourced, IC-grade research.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${display.variable} ${serif.variable} ${mono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={`${sans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
+      <body className="flex min-h-full flex-col">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TooltipProvider>{children}</TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

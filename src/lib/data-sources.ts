@@ -71,6 +71,245 @@ export async function edgarConcept(
   };
 }
 
+// --- RBA Table F1: Australian cash rate target (public CSV, no key) ---
+// Licence note: the Cash Rate + "Cash Rate Materials" (F1 included) are carved OUT of the RBA's
+// CC BY 4.0 grant into a bespoke Section 4 (https://www.rba.gov.au/copyright/). Commercial use is
+// permitted with attribution to the RBA. We attribute "RBA — Table F1" and do NOT label this
+// "CC BY 4.0" (that label belongs to ABS data, not this series).
+const RBA_F1_URL = "https://www.rba.gov.au/statistics/tables/csv/f1-data.csv";
+
+export async function auCashRate(): Promise<Fact> {
+  const base = {
+    label: "RBA cash rate target",
+    source: "RBA — Table F1 (Cash Rate Target)",
+    sourceUrl: RBA_F1_URL,
+  };
+  try {
+    const res = await fetch(RBA_F1_URL, { next: { revalidate: 3600 } });
+    if (!res.ok) return { ...base, value: null, note: `HTTP ${res.status}. Not obtained — not estimated.` };
+    const text = await res.text();
+    const rows = text.split(/\r?\n/).map((line) => splitCsv(line));
+
+    // Find the "Series ID" metadata row and locate the FIRMMCRTD column by ID (not by position).
+    const idRow = rows.find((r) => r[0]?.trim() === "Series ID");
+    if (!idRow) return { ...base, value: null, note: "RBA F1 format changed: no 'Series ID' header row. Not obtained." };
+    const col = idRow.findIndex((c) => c.trim() === "FIRMMCRTD");
+    if (col < 0) return { ...base, value: null, note: "RBA F1 format changed: FIRMMCRTD series not found. Not obtained." };
+
+    // Data rows are those whose first cell parses as a date (dd-Mon-yyyy). Take the LAST NON-EMPTY
+    // FIRMMCRTD value — the newest date row routinely publishes a blank cash rate (index appended first).
+    const dataRows = rows.filter((r) => /^\d{2}-[A-Za-z]{3}-\d{4}$/.test(r[0]?.trim() ?? ""));
+    let lastGood: { date: string; val: string } | null = null;
+    for (const r of dataRows) {
+      const v = r[col]?.trim();
+      if (v) lastGood = { date: r[0].trim(), val: v };
+    }
+    if (!lastGood) return { ...base, value: null, note: "No non-empty cash-rate value in RBA F1. Not obtained." };
+
+    return {
+      label: "RBA cash rate target",
+      value: Number(lastGood.val),
+      unit: "% p.a.",
+      source: "RBA — Table F1 (Cash Rate Target)",
+      sourceUrl: RBA_F1_URL,
+      asOf: lastGood.date,
+    };
+  } catch (e) {
+    return { ...base, value: null, note: `Fetch failed (${(e as Error).message}). Not obtained.` };
+  }
+}
+
+// --- RBA Table F11.1: exchange rates (public CSV, no key) ---
+// Same format family as F1 (auCashRate): metadata rows, a "Series ID" row, then dated data rows.
+// Verified live 2026-09-10: metadata rows are Title/Description/Frequency/Type/Units/(2 blank)/Source/
+// Publication date/Series ID; AUD/USD is Series ID "FXRUSD" (first data column). The newest date rows
+// can be blank, so we take the LAST NON-EMPTY FXRUSD value, locating the column by ID (not position).
+const RBA_F11_URL = "https://www.rba.gov.au/statistics/tables/csv/f11.1-data.csv";
+
+export async function auFxRate(): Promise<Fact> {
+  const base = {
+    label: "AUD/USD exchange rate",
+    source: "RBA — Table F11.1 (Exchange Rates)",
+    sourceUrl: RBA_F11_URL,
+  };
+  try {
+    const res = await fetch(RBA_F11_URL, { next: { revalidate: 3600 } });
+    if (!res.ok) return { ...base, value: null, note: `HTTP ${res.status}. Not obtained — not estimated.` };
+    const text = await res.text();
+    const rows = text.split(/\r?\n/).map((line) => splitCsv(line));
+
+    // Find the "Series ID" metadata row and locate the FXRUSD column by ID (not by position).
+    const idRow = rows.find((r) => r[0]?.trim() === "Series ID");
+    if (!idRow) return { ...base, value: null, note: "RBA F11.1 format changed: no 'Series ID' header row. Not obtained." };
+    const col = idRow.findIndex((c) => c.trim() === "FXRUSD");
+    if (col < 0) return { ...base, value: null, note: "RBA F11.1 format changed: FXRUSD series not found. Not obtained." };
+
+    // Data rows are those whose first cell parses as a date (dd-Mon-yyyy). Take the LAST NON-EMPTY
+    // FXRUSD value — the newest date row may publish a blank rate (e.g. weekends/holidays).
+    const dataRows = rows.filter((r) => /^\d{2}-[A-Za-z]{3}-\d{4}$/.test(r[0]?.trim() ?? ""));
+    let lastGood: { date: string; val: string } | null = null;
+    for (const r of dataRows) {
+      const v = r[col]?.trim();
+      if (v) lastGood = { date: r[0].trim(), val: v };
+    }
+    if (!lastGood) return { ...base, value: null, note: "No non-empty AUD/USD value in RBA F11.1. Not obtained." };
+
+    return {
+      label: "AUD/USD exchange rate",
+      value: Number(lastGood.val),
+      unit: "USD per AUD",
+      source: "RBA — Table F11.1 (Exchange Rates)",
+      sourceUrl: RBA_F11_URL,
+      asOf: lastGood.date,
+    };
+  } catch (e) {
+    return { ...base, value: null, note: `Fetch failed (${(e as Error).message}). Not obtained.` };
+  }
+}
+
+// --- U.S. EIA petroleum spot prices (public domain; requires a FREE API key) ---
+// EIA v2 API. Facet codes VERIFIED live 2026-09-10 against
+// https://api.eia.gov/v2/petroleum/pri/spt/facet/product/ :
+//   Brent = product facet "EPCBRENT" (UK Brent Crude Oil)
+//   WTI   = product facet "EPCWTI"   (WTI Crude Oil)
+// (These are the v2 product-facet codes; they are NOT the old-API series names RBRTE/RWTC.)
+// The key is read from process.env.EIA_API_KEY. If it is missing we return an honest not-obtained
+// Fact (value:null) rather than throwing — no key is ever hardcoded.
+const EIA_SPOT_BASE = "https://api.eia.gov/v2/petroleum/pri/spt/data/";
+const EIA_PRODUCTS: Record<"brent" | "wti", { facet: string; label: string }> = {
+  brent: { facet: "EPCBRENT", label: "Brent crude spot" },
+  wti: { facet: "EPCWTI", label: "WTI crude spot" },
+};
+
+export async function eiaOil(product: "brent" | "wti"): Promise<Fact> {
+  const spec = EIA_PRODUCTS[product];
+  // Public sourceUrl NEVER contains the key.
+  const sourceUrl = `${EIA_SPOT_BASE}?frequency=daily&data[0]=value&facets[product][]=${spec.facet}`;
+  const base = { label: spec.label, source: "U.S. EIA (public domain)", sourceUrl };
+
+  const key = process.env.EIA_API_KEY;
+  if (!key) {
+    return { ...base, value: null, note: "EIA_API_KEY not set — oil price not obtained (set the key to enable)." };
+  }
+
+  const url =
+    `${EIA_SPOT_BASE}?api_key=${encodeURIComponent(key)}` +
+    `&frequency=daily&data[0]=value&facets[product][]=${spec.facet}` +
+    `&sort[0][column]=period&sort[0][direction]=desc&length=5`;
+  try {
+    const res = await fetch(url, { next: { revalidate: 3600 } });
+    if (!res.ok) return { ...base, value: null, note: `EIA API HTTP ${res.status}. Not obtained — not estimated.` };
+    const j = (await res.json()) as {
+      response?: { data?: { period: string; value: number | string | null }[] };
+    };
+    const data = j.response?.data ?? [];
+    // Sorted newest-first; take the newest row that carries a real numeric value.
+    let latest: { period: string; val: number } | null = null;
+    for (const row of data) {
+      if (row.value === null || row.value === undefined || row.value === "") continue;
+      const n = Number(row.value);
+      if (Number.isNaN(n)) continue;
+      latest = { period: row.period, val: n };
+      break;
+    }
+    if (!latest) return { ...base, value: null, note: "No non-empty EIA spot observation. Not obtained." };
+    return {
+      label: spec.label,
+      value: latest.val,
+      unit: "USD/bbl",
+      source: "U.S. EIA (public domain)",
+      sourceUrl,
+      asOf: latest.period,
+    };
+  } catch (e) {
+    return { ...base, value: null, note: `Fetch failed (${(e as Error).message}). Not obtained.` };
+  }
+}
+
+// Minimal CSV field splitter (handles the quoted commas in RBA/ABS descriptions).
+function splitCsv(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ;
+    } else if (ch === "," && !inQ) {
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+// --- ABS Data API (SDMX, public, no key since 2024-11, genuinely CC BY 4.0) ---
+// Base moved to data.api.abs.gov.au/rest. We request CSV for easy parsing. API is officially
+// beta → fetch defensively (detect non-CSV error bodies, mark not-obtained on trouble).
+const ABS_BASE = "https://data.api.abs.gov.au/rest/data";
+
+// Known dataflows (verified live 2026-09-10):
+//   CPI: dataflow "CPI", key 1.10001.10.50.Q  (All groups CPI, index, Australia, quarterly)
+//   GDP: dataflow "ANA_AGG" (National Accounts key aggregates)
+// Keys verified live 2026-09-10 against the ABS SDMX API.
+//   CPI: dataflow "CPI", key 1.10001.10.50.Q  (All groups CPI, index numbers, Australia, quarterly)
+//   GDP: dataflow "ANA_AGG", key M2.GPM_PCA.20.AUS.Q  (GDP growth, % change per quarter)
+const ABS_SERIES: Record<string, { dataflow: string; key: string; label: string; unit: string }> = {
+  CPI: { dataflow: "CPI", key: "1.10001.10.50.Q", label: "ABS CPI (All groups, index, Australia)", unit: "index" },
+  GDP: { dataflow: "ANA_AGG", key: "M2.GPM_PCA.20.AUS.Q", label: "ABS GDP (growth, % change per quarter, Australia)", unit: "% q/q" },
+};
+
+export async function absSeries(name: keyof typeof ABS_SERIES | string): Promise<Fact> {
+  const spec = ABS_SERIES[name as string];
+  const base = { label: `ABS ${name}`, source: "Australian Bureau of Statistics (CC BY 4.0)", sourceUrl: ABS_BASE };
+  if (!spec) return { ...base, value: null, note: `Unknown ABS series '${name}'. Not obtained.` };
+  const url = `${ABS_BASE}/${spec.dataflow}/${spec.key}`;
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/vnd.sdmx.data+csv" },
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return { ...base, value: null, sourceUrl: url, note: `ABS API HTTP ${res.status} (beta). Not obtained.` };
+    const text = await res.text();
+    // Defensive: a CSV response has a header line with commas; an HTML/JSON error body won't parse as our CSV.
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2 || !lines[0].includes(",")) {
+      return { ...base, value: null, sourceUrl: url, note: "ABS API returned a non-CSV/error body. Not obtained." };
+    }
+    const header = splitCsv(lines[0]).map((h) => h.trim());
+    const timeIdx = header.findIndex((h) => /^TIME_PERIOD$/i.test(h));
+    const valIdx = header.findIndex((h) => /^(OBS_VALUE|value)$/i.test(h));
+    if (valIdx < 0 || timeIdx < 0) {
+      return { ...base, value: null, sourceUrl: url, note: "ABS CSV missing OBS_VALUE/TIME_PERIOD column. Not obtained." };
+    }
+    // Rows are NOT reliably time-sorted (CPI returns descending, GDP ascending). Pick the
+    // observation with the MAX TIME_PERIOD that has a non-empty value. Note: "0" is a valid
+    // value, so test for empty-string, not falsiness.
+    let latest: { time: string; val: string } | null = null;
+    for (const line of lines.slice(1)) {
+      const cells = splitCsv(line);
+      const t = cells[timeIdx]?.trim();
+      const v = cells[valIdx]?.trim();
+      if (!t || v === undefined || v === "") continue;
+      if (!latest || t > latest.time) latest = { time: t, val: v }; // ISO-ish "2026-Q2" compares lexicographically
+    }
+    if (!latest) return { ...base, value: null, sourceUrl: url, note: "No non-empty ABS observation. Not obtained." };
+    return {
+      label: spec.label,
+      value: Number(latest.val),
+      unit: spec.unit,
+      source: "Australian Bureau of Statistics (CC BY 4.0)",
+      sourceUrl: url,
+      asOf: latest.time,
+    };
+  } catch (e) {
+    return { ...base, value: null, sourceUrl: url, note: `Fetch failed (${(e as Error).message}). Not obtained.` };
+  }
+}
+
 // --- US Treasury daily par yield (public fiscal-data API, no key) ---
 export async function treasuryYield(): Promise<Fact> {
   // Endpoint lives under v2, not v1 (v1 returns 404). Verified live 2026-09-08.
