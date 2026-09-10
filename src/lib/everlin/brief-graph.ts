@@ -113,6 +113,7 @@ function assemble(state: typeof BriefState.State) {
       `figures require a licensed data source and are marked not obtained.`,
     figures,
     claims: [],
+    sections: [],
     escalations: [],
     questionForIC:
       "Given the current RBA cash rate and the flat/softening macro reads, does the IC want to revisit " +

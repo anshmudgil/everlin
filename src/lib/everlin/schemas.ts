@@ -75,6 +75,33 @@ export const Claim = z.object({
 });
 export type Claim = z.infer<typeof Claim>;
 
+/**
+ * T05 — per-section reasoning, the golden's "THE FACTS." / "THE INTERPRETATION."
+ * structure made schema-backed. `facts` are sourced Claims (each carries its
+ * attribution, enforcing the trust-spine at the section level); `interpretation`
+ * is explicitly-labelled opinion generated from those facts — it never states a
+ * new number and carries no source of its own because it IS the analysis. The
+ * separation is load-bearing: the IC must be able to tell data from opinion, and
+ * the fidelity eval checks both halves are present per reasoned section.
+ */
+export const SectionReasoning = z
+  .object({
+    // Which golden section this reasoning belongs to (see golden-checklist.ts).
+    section: z.string().min(1),
+    facts: z.array(Claim).default([]),
+    interpretation: z.string().default(""),
+  })
+  .superRefine((s, ctx) => {
+    // An interpretation with no facts under it is an unsourced opinion block.
+    if (s.interpretation.trim() && s.facts.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: `SectionReasoning '${s.section}': interpretation present but no sourced facts underneath it`,
+      });
+    }
+  });
+export type SectionReasoning = z.infer<typeof SectionReasoning>;
+
 const KNOWN_OWNERS = [
   "Jordan Lin", "Clyde McConaghy", "Jordan Hickey",
   "Nick Johnson", "Nick Johnson / WMS", "Lauren Pereira", "Kara Arnott",
@@ -184,6 +211,10 @@ export const MorningBrief = z
     executiveSummary: z.string().min(1),
     figures: z.array(Figure).default([]),
     claims: z.array(Claim).default([]),
+    // T05: per-section reasoning (FACTS/INTERPRETATION), keyed to golden sections.
+    // Optional so the existing thin brief keeps validating; the PDF renderer
+    // reads these to fill THE ONE THING / AUSTRALIA / etc.
+    sections: z.array(SectionReasoning).default([]),
     escalations: z.array(Escalated).default([]),
     questionForIC: z.string().min(1, "a 'Question for the IC' is mandatory (Clyde's format)"),
     disclaimer: withDisclaimer.default(DISCLAIMER),

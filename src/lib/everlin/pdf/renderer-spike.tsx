@@ -31,7 +31,7 @@ export async function renderSpike(): Promise<Buffer> {
       ),
     ),
   );
-  return renderToBuffer(Doc as React.ReactElement);
+  return renderToBuffer(Doc);
 }
 
 /** Returns true iff the spike renders a valid PDF (first 5 bytes are %PDF-). */
