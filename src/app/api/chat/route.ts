@@ -108,10 +108,10 @@ function makeTools(writer: UIMessageStreamWriter<EverlinUIMessage>) {
         .describe("As-of date YYYY-MM-DD. Defaults to a recent valid date if omitted."),
     }),
     execute: async ({ asOf }) => {
-      // The request does not cleanly carry the wall-clock date to a tool, so
-      // default to a hardcoded recent valid date when the model omits asOf.
-      const DEFAULT_AS_OF = "2026-09-10";
-      const asOfDate = asOf ?? DEFAULT_AS_OF;
+      // When the model omits asOf, use the server's current date (YYYY-MM-DD in
+      // UTC). This runs server-side per request, so the brief is stamped with the
+      // real day it was generated rather than a hardcoded date.
+      const asOfDate = asOf ?? new Date().toISOString().slice(0, 10);
       const result = await buildDailyBrief(asOfDate);
       if (!result.ok || !result.brief) {
         return {
