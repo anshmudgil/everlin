@@ -8,9 +8,8 @@
  * same asOf + same upstream data => identical bytes (byteHash in the header).
  */
 import { NextResponse } from "next/server";
-import { buildDailyBrief } from "@/lib/everlin/brief-graph";
-import { renderBriefPdf } from "@/lib/everlin/pdf/render";
-import { MorningBrief } from "@/lib/everlin/schemas";
+import { buildDailyBriefHeadless } from "@/lib/everlin/pipeline/headless";
+import { getBriefStore } from "@/lib/everlin/pipeline/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -18,32 +17,31 @@ export const maxDuration = 60;
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const asOf = url.searchParams.get("asOf") ?? "";
+  const force = url.searchParams.get("force") === "1";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
     return NextResponse.json({ error: "asOf=YYYY-MM-DD required" }, { status: 400 });
   }
 
-  const built = await buildDailyBrief(asOf);
-  if (!built.ok || !built.brief) {
-    return NextResponse.json({ error: "brief build failed", details: built.errors }, { status: 422 });
+  const store = getBriefStore();
+  // Run the full headless pipeline (retrieve -> reason -> assemble -> render -> store).
+  const result = await buildDailyBriefHeadless(asOf, { store, force, nowIso: new Date().toISOString() });
+  if (!result.ok) {
+    return NextResponse.json({ error: "brief build failed", details: result.errors }, { status: 422 });
   }
 
-  // Re-validate through the schema so the renderer gets a typed MorningBrief.
-  const parsed = MorningBrief.safeParse(built.brief);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "brief failed schema", details: parsed.error.issues.slice(0, 3) },
-      { status: 422 },
-    );
+  const stored = await store.get(asOf);
+  if (!stored) {
+    return NextResponse.json({ error: "brief not found after build" }, { status: 500 });
   }
 
-  const { pdf, byteHash, bytes } = await renderBriefPdf(parsed.data);
-  return new NextResponse(new Uint8Array(pdf), {
+  return new NextResponse(new Uint8Array(stored.pdf), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="everlin-brief-${asOf}.pdf"`,
-      "X-Brief-Byte-Hash": byteHash,
-      "X-Brief-Bytes": String(bytes),
+      "X-Brief-Byte-Hash": stored.byteHash,
+      "X-Brief-Bytes": String(stored.pdf.length),
+      "X-Brief-Deduped": String(result.deduped),
     },
   });
 }
