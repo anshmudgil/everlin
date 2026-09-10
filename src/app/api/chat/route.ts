@@ -1,5 +1,6 @@
 import {
   streamText,
+  smoothStream,
   tool,
   stepCountIs,
   UIMessage,
@@ -290,6 +291,9 @@ export async function POST(req: Request) {
         messages: modelMessages,
         tools: makeTools(writer),
         stopWhen: stepCountIs(8), // allow retrieve -> reason -> answer loops
+        // T20: smooth token delivery — word-chunked, lightly throttled — so the
+        // brief text streams in readable bursts instead of ragged token spurts.
+        experimental_transform: smoothStream({ delayInMs: 15, chunking: "word" }),
       });
       writer.merge(toUIMessageStream({ stream: result.stream }));
     },
