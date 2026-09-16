@@ -348,7 +348,7 @@ function Composer({
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <Command shouldFilter={false}>
-          <CommandList>
+          <CommandList className="max-h-80">
             <CommandGroup heading="Skills">
               {list.map((c) => (
                 <CommandItem

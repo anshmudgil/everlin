@@ -105,20 +105,20 @@ export function AutomationsBoard({
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-5 py-5">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-5 py-5 pb-8">
         <div>
           <h2 className="text-base font-semibold">Scheduled work</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Fixture runs for the prototype. Run sends the skill into chat; Open loads the prompt so you can edit first.
           </p>
         </div>
-        <ul className="flex flex-col gap-3">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {AUTOMATIONS.map((a) => {
             const selected = a.id === selectedId;
             return (
               <li key={a.id}>
                 <article
-                  className={`rounded-xl border bg-card p-4 shadow-xs transition-colors ${
+                  className={`rounded-xl border bg-card p-3 shadow-xs transition-colors ${
                     selected ? "border-accent" : "border-border"
                   }`}
                 >
