@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useChat } from "@ai-sdk/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { FileUIPart } from "ai";
 import {
   Conversation,
@@ -34,6 +35,10 @@ import {
   AttachmentInfo,
   AttachmentRemove,
 } from "@/components/ai-elements/attachments";
+import {
+  Suggestion,
+  Suggestions,
+} from "@/components/ai-elements/suggestion";
 import {
   Command,
   CommandGroup,
@@ -68,9 +73,22 @@ import {
   XIcon,
   PanelRightIcon,
   PaperclipIcon,
+  SparklesIcon,
+  WrenchIcon,
 } from "lucide-react";
 import { SessionList, SESSIONS } from "@/components/session-list";
 import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  AutomationsBoard,
+  AutomationsRailList,
+} from "@/components/automations-panel";
+import { getAutomation, type Automation } from "@/lib/everlin/automations";
+import {
+  SKILL_CHIPS,
+  SKILL_COMMANDS,
+  filterSkillCommands,
+  type SkillCommand,
+} from "@/lib/everlin/skill-commands";
 
 // Per-thread artifact cache (module-scoped, survives thread switches within a session).
 // Keyed by threadId so switching away and back re-shows a brief that already streamed.
@@ -79,6 +97,8 @@ const artifactCache = new Map<string, BriefArtifact>();
 // localStorage keys for persisted UI prefs (read in an effect, never at render → no
 // hydration mismatch). See docs/specs/ui-canvas-increment.md risk note.
 const LS_CANVAS = "everlin.canvasOpen";
+
+export type RailTab = "sessions" | "automations";
 
 // Kept for backwards-compat: some routes/imports still reference THREADS.
 export const THREADS = SESSIONS;
@@ -91,14 +111,6 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
-
-// A small static command palette. Typing "/" at the start of an empty input
-// opens this list; selecting an item fills the input with the command text.
-const SLASH_COMMANDS = [
-  { cmd: "/brief", label: "Generate the daily brief" },
-  { cmd: "/weekly", label: "Weekly IC brief" },
-  { cmd: "/macro", label: "Macro dashboard" },
-];
 
 // The agent's generated brief becomes an artifact in the canvas. Here it is detected
 // from a data part the agent stream can emit (data-artifact); until the model emits one,
@@ -144,11 +156,73 @@ function SidebarFooter() {
   );
 }
 
-function SidebarInner({ threadId }: { threadId: string }) {
+function RailTabs({
+  value,
+  onChange,
+}: {
+  value: RailTab;
+  onChange: (tab: RailTab) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Workspace sections"
+      className="mx-3 mb-1 grid grid-cols-2 gap-1 rounded-md bg-black/20 p-1"
+    >
+      {(["sessions", "automations"] as const).map((tab) => {
+        const selected = value === tab;
+        return (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onChange(tab)}
+            className={`rounded px-2 py-1.5 text-[11px] font-medium uppercase tracking-wider transition-colors ${
+              selected
+                ? "bg-[var(--sidebar-accent)]/20 text-[var(--sidebar-accent)]"
+                : "text-sidebar-foreground/60 hover:text-sidebar-foreground"
+            }`}
+          >
+            {tab === "sessions" ? "Sessions" : "Automations"}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SidebarInner({
+  threadId,
+  railTab,
+  onRailTab,
+  selectedAutomationId,
+  onSelectAutomation,
+  onRunAutomation,
+  onOpenAutomation,
+}: {
+  threadId: string;
+  railTab: RailTab;
+  onRailTab: (tab: RailTab) => void;
+  selectedAutomationId: string | null;
+  onSelectAutomation: (a: Automation) => void;
+  onRunAutomation: (a: Automation) => void;
+  onOpenAutomation: (a: Automation) => void;
+}) {
   return (
     <>
       <SidebarBrand />
-      <SessionList activeId={threadId} />
+      <RailTabs value={railTab} onChange={onRailTab} />
+      {railTab === "sessions" ? (
+        <SessionList activeId={threadId} />
+      ) : (
+        <AutomationsRailList
+          selectedId={selectedAutomationId}
+          onSelect={onSelectAutomation}
+          onRun={onRunAutomation}
+          onOpen={onOpenAutomation}
+        />
+      )}
       <SidebarFooter />
     </>
   );
@@ -188,53 +262,81 @@ function AttachControls() {
 }
 
 // The full chat composer: controlled textarea (via PromptInputProvider), a "/"
-// slash-command menu shown when the input starts with "/", a file-attach button,
-// and the submit button. Kept as its own component so it can consume the provider
-// context hooks (usePromptInputController / usePromptInputAttachments).
+// slash-command menu shown when the input starts with "/", a skills picker, a
+// file-attach button, and the submit button.
 function Composer({
   status,
   onSubmit,
+  draftPrompt,
+  onDraftConsumed,
 }: {
   status: ReturnType<typeof useChat>["status"];
   onSubmit: (msg: PromptInputMessage) => void;
+  draftPrompt: string | null;
+  onDraftConsumed: () => void;
 }) {
   const controller = usePromptInputController();
   const value = controller.textInput.value;
+  const [skillsOpen, setSkillsOpen] = useState(false);
 
   // Show the command menu only when the user types "/" at the start of the input.
   // Trailing filter after the slash narrows the list (e.g. "/we" → Weekly).
   const slashOpen = value.startsWith("/");
   const filter = slashOpen ? value.slice(1).toLowerCase() : "";
-  const filtered = SLASH_COMMANDS.filter(
-    (c) =>
-      c.cmd.slice(1).toLowerCase().startsWith(filter) ||
-      c.label.toLowerCase().includes(filter),
-  );
-  const showMenu = slashOpen && filtered.length > 0;
+  const filtered = slashOpen ? filterSkillCommands(filter) : SKILL_COMMANDS;
+  const showMenu = (slashOpen && filtered.length > 0) || skillsOpen;
+  const list = skillsOpen && !slashOpen ? SKILL_COMMANDS : filtered;
 
-  const pickCommand = (cmd: string) => {
-    // Fill the input with the command text (a trailing space lets the user keep typing).
-    controller.textInput.setInput(`${cmd} `);
+  const setInput = controller.textInput.setInput;
+
+  const pickCommand = (c: SkillCommand) => {
+    // Fill the real skill prompt (not just "/brief ") so sending it hits planSkills.
+    setInput(c.prompt);
+    setSkillsOpen(false);
   };
 
+  useEffect(() => {
+    if (!draftPrompt) return;
+    setInput(draftPrompt);
+    onDraftConsumed();
+  }, [draftPrompt, onDraftConsumed, setInput]);
+
   return (
-    <Popover open={showMenu}>
+    <Popover
+      open={showMenu}
+      onOpenChange={(open) => {
+        if (!open) setSkillsOpen(false);
+      }}
+    >
       <PopoverAnchor asChild>
         <PromptInput onSubmit={onSubmit} multiple>
           <PromptInputBody>
             <PromptInputTextarea
-              placeholder="Message the assistant…  (⏎ send)"
+              placeholder="Message the assistant…  (⏎ send, / skills)"
               onKeyDown={(e) => {
                 // Esc closes the slash menu by clearing the leading slash.
                 if (e.key === "Escape" && slashOpen) {
                   e.preventDefault();
                   controller.textInput.setInput("");
                 }
+                if (e.key === "Escape" && skillsOpen) {
+                  e.preventDefault();
+                  setSkillsOpen(false);
+                }
               }}
             />
           </PromptInputBody>
           <PromptInputFooter>
             <AttachControls />
+            <PromptInputButton
+              onClick={() => setSkillsOpen((v) => !v)}
+              tooltip="Skills"
+              aria-label="Open skills"
+              aria-expanded={skillsOpen}
+              className={skillsOpen ? "text-accent" : undefined}
+            >
+              <SparklesIcon className="size-4" />
+            </PromptInputButton>
             <PromptInputSubmit status={status} />
           </PromptInputFooter>
         </PromptInput>
@@ -242,17 +344,17 @@ function Composer({
       <PopoverContent
         align="start"
         side="top"
-        className="w-72 p-0"
+        className="w-80 p-0"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <Command shouldFilter={false}>
-          <CommandList>
-            <CommandGroup heading="Commands">
-              {filtered.map((c) => (
+          <CommandList className="max-h-80">
+            <CommandGroup heading="Skills">
+              {list.map((c) => (
                 <CommandItem
                   key={c.cmd}
                   value={c.cmd}
-                  onSelect={() => pickCommand(c.cmd)}
+                  onSelect={() => pickCommand(c)}
                 >
                   <span className="font-medium">{c.cmd}</span>
                   <span className="ml-2 text-muted-foreground">{c.label}</span>
@@ -267,7 +369,14 @@ function Composer({
 }
 
 export function EverlinWorkspace({ threadId }: { threadId: string }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [mobileNav, setMobileNav] = useState(false);
+  const [railTab, setRailTab] = useState<RailTab>("sessions");
+  const [selectedAutomationId, setSelectedAutomationId] = useState<string | null>(
+    null,
+  );
+  const [draftPrompt, setDraftPrompt] = useState<string | null>(null);
   // Manual canvas toggle. Default closed; hydrated from localStorage in an effect
   // (render-time localStorage would diverge server/client → hydration mismatch).
   const [canvasManuallyOpen, setCanvasManuallyOpen] = useState(false);
@@ -302,6 +411,25 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
     });
   }, []);
 
+  const runConsumed = useRef(false);
+  useEffect(() => {
+    const view = searchParams.get("view");
+    const run = searchParams.get("run");
+    if (view === "automations" && !run) {
+      queueMicrotask(() => setRailTab("automations"));
+    }
+    if (!run || runConsumed.current) return;
+    const auto = getAutomation(run);
+    if (!auto) return;
+    runConsumed.current = true;
+    queueMicrotask(() => {
+      setRailTab("sessions");
+      setSelectedAutomationId(auto.id);
+      sendMessage({ text: auto.prompt });
+      router.replace(`/t/${threadId}`, { scroll: false });
+    });
+  }, [searchParams, threadId, router, sendMessage]);
+
   const streaming = status !== "ready" && status !== "error";
 
   // Canvas is open when a brief exists OR the user opened it manually.
@@ -322,11 +450,42 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
     // AI SDK v7: sendMessage accepts { text, files } where files is FileUIPart[].
     // PromptInput has already converted attachment blob URLs to data URLs, so the
     // file parts are self-contained and travel with the message to the route.
+    setRailTab("sessions");
     sendMessage({
       text: msg.text ?? "",
       files: msg.files as FileUIPart[] | undefined,
     });
   };
+
+  const consumeDraft = useCallback(() => setDraftPrompt(null), []);
+
+  const selectAutomation = useCallback((a: Automation) => {
+    setSelectedAutomationId(a.id);
+    setRailTab("automations");
+  }, []);
+
+  const runAutomation = useCallback(
+    (a: Automation) => {
+      // Fresh thread so a demo Run doesn't append onto an existing session.
+      router.push(`/t/session-${Date.now().toString(36)}?run=${a.id}`);
+    },
+    [router],
+  );
+
+  const openAutomation = useCallback((a: Automation) => {
+    setSelectedAutomationId(a.id);
+    setDraftPrompt(a.prompt);
+    setRailTab("sessions");
+    setMobileNav(false);
+  }, []);
+
+  const sendSkill = useCallback(
+    (prompt: string) => {
+      setRailTab("sessions");
+      sendMessage({ text: prompt });
+    },
+    [sendMessage],
+  );
 
   // Export the brief as a real PDF via the browser's print pipeline (no extra dep):
   // open a clean print window with the doc's rendered HTML + Inter, and invoke print,
@@ -358,6 +517,16 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
     }, 250);
   }, [artifact]);
 
+  const sidebarProps = {
+    threadId,
+    railTab,
+    onRailTab: setRailTab,
+    selectedAutomationId,
+    onSelectAutomation: selectAutomation,
+    onRunAutomation: runAutomation,
+    onOpenAutomation: openAutomation,
+  };
+
   return (
     <div
       className={`grid h-dvh max-md:grid-cols-1 bg-background text-foreground transition-[grid-template-columns] duration-300 ease-out ${
@@ -366,9 +535,9 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
           : "grid-cols-[248px_1fr]"
       }`}
     >
-      {/* RAIL — sessions, forest green, gold active states */}
+      {/* RAIL — sessions + automations, forest green, gold active states */}
       <aside className="flex min-h-0 flex-col border-r border-black/10 bg-sidebar text-sidebar-foreground max-md:hidden">
-        <SidebarInner threadId={threadId} />
+        <SidebarInner {...sidebarProps} />
       </aside>
 
       {/* MOBILE off-canvas sidebar — transform-only slide, GPU compositor */}
@@ -399,13 +568,13 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
               >
                 <XIcon className="size-4" />
               </button>
-              <SidebarInner threadId={threadId} />
+              <SidebarInner {...sidebarProps} />
             </motion.aside>
           </div>
         )}
       </AnimatePresence>
 
-      {/* CONVERSATION — the hero, one chatbot */}
+      {/* CONVERSATION — the hero, one chatbot; Automations tab swaps the list in-place */}
       <section className="flex min-h-0 flex-col border-r border-border bg-background">
         <header className="flex items-center gap-3 border-b border-border px-5 py-3">
           <button
@@ -415,7 +584,17 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
           >
             <MenuIcon className="size-4" />
           </button>
-          <span className="text-[15px] font-semibold">Assistant</span>
+          <span className="text-[15px] font-semibold">
+            {railTab === "automations" ? "Automations" : "Assistant"}
+          </span>
+          {railTab === "sessions" && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+              <WrenchIcon className="size-3" />
+              tools
+              <SparklesIcon className="size-3" />
+              skills
+            </span>
+          )}
           <button
             onClick={toggleCanvas}
             aria-pressed={canvasManuallyOpen}
@@ -430,73 +609,104 @@ export function EverlinWorkspace({ threadId }: { threadId: string }) {
           </button>
         </header>
 
-        <Conversation className="min-h-0 flex-1">
-          <ConversationContent className="mx-auto w-full max-w-2xl">
-            {messages.length === 0 && (
-              <ConversationEmptyState
-                title="How can I help?"
-                description="Ask anything, or type / for commands."
-              />
-            )}
-            {messages.map((message) => (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                style={{ willChange: "transform, opacity" }}
-              >
-                <Message from={message.role}>
-                  <MessageContent>
-                    {message.parts.map((part, i) => {
-                      if (part.type === "text") {
-                        return (
-                          <MessageResponse key={`${message.id}-${i}`}>
-                            {part.text}
-                          </MessageResponse>
-                        );
-                      }
-                      // tool calls render as a collapsible "retrieving…" panel — the
-                      // visible signal that a figure came from a real source, not memory.
-                      if (part.type.startsWith("tool-")) {
-                        const p = part as {
-                          type: `tool-${string}`;
-                          state:
-                            | "input-streaming"
-                            | "input-available"
-                            | "output-available"
-                            | "output-error";
-                          input?: unknown;
-                          output?: unknown;
-                          errorText?: string;
-                        };
-                        return (
-                          <Tool key={`${message.id}-${i}`}>
-                            <ToolHeader type={p.type as `tool-${string}`} state={p.state} />
-                            <ToolContent>
-                              <ToolInput input={p.input} />
-                              <ToolOutput
-                                output={p.output as React.ReactNode}
-                                errorText={p.errorText}
-                              />
-                            </ToolContent>
-                          </Tool>
-                        );
-                      }
-                      return null;
-                    })}
-                  </MessageContent>
-                </Message>
-              </motion.div>
-            ))}
-          </ConversationContent>
-          <ConversationScrollButton />
-        </Conversation>
+        {railTab === "automations" ? (
+          <AutomationsBoard
+            selectedId={selectedAutomationId}
+            onSelect={selectAutomation}
+            onRun={runAutomation}
+            onOpen={openAutomation}
+          />
+        ) : (
+          <Conversation className="min-h-0 flex-1">
+            <ConversationContent className="mx-auto w-full max-w-2xl">
+              {messages.length === 0 && (
+                <ConversationEmptyState>
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <h3 className="font-medium text-sm">How can I help?</h3>
+                      <p className="text-muted-foreground text-sm">
+                        Ask anything, type / for skills, or pick a chip. Tool calls show in the thread.
+                      </p>
+                    </div>
+                    <Suggestions className="justify-center px-1">
+                      {SKILL_CHIPS.map((c) => (
+                        <Suggestion
+                          key={c.cmd}
+                          suggestion={c.prompt}
+                          onClick={(prompt) => sendSkill(prompt)}
+                        >
+                          {c.label}
+                        </Suggestion>
+                      ))}
+                    </Suggestions>
+                  </div>
+                </ConversationEmptyState>
+              )}
+              {messages.map((message) => (
+                <motion.div
+                  key={message.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  style={{ willChange: "transform, opacity" }}
+                >
+                  <Message from={message.role}>
+                    <MessageContent>
+                      {message.parts.map((part, i) => {
+                        if (part.type === "text") {
+                          return (
+                            <MessageResponse key={`${message.id}-${i}`}>
+                              {part.text}
+                            </MessageResponse>
+                          );
+                        }
+                        // tool calls render as a collapsible "retrieving…" panel — the
+                        // visible signal that a figure came from a real source, not memory.
+                        if (part.type.startsWith("tool-")) {
+                          const p = part as {
+                            type: `tool-${string}`;
+                            state:
+                              | "input-streaming"
+                              | "input-available"
+                              | "output-available"
+                              | "output-error";
+                            input?: unknown;
+                            output?: unknown;
+                            errorText?: string;
+                          };
+                          return (
+                            <Tool key={`${message.id}-${i}`} defaultOpen>
+                              <ToolHeader type={p.type as `tool-${string}`} state={p.state} />
+                              <ToolContent>
+                                <ToolInput input={p.input} />
+                                <ToolOutput
+                                  output={p.output as React.ReactNode}
+                                  errorText={p.errorText}
+                                />
+                              </ToolContent>
+                            </Tool>
+                          );
+                        }
+                        return null;
+                      })}
+                    </MessageContent>
+                  </Message>
+                </motion.div>
+              ))}
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
+        )}
 
         <div className="border-t border-border p-4">
           <div className="mx-auto w-full max-w-2xl">
             <PromptInputProvider>
-              <Composer status={status} onSubmit={onSubmit} />
+              <Composer
+                status={status}
+                onSubmit={onSubmit}
+                draftPrompt={draftPrompt}
+                onDraftConsumed={consumeDraft}
+              />
             </PromptInputProvider>
           </div>
         </div>

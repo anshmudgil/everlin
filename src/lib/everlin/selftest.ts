@@ -11,6 +11,8 @@ import {
 } from "./calc";
 import { validateOutput, lintText } from "./validate";
 import { DISCLAIMER, SCHEMA_BY_SKILL } from "./schemas";
+import { AUTOMATIONS, getAutomation } from "./automations";
+import { SKILL_COMMANDS, filterSkillCommands } from "./skill-commands";
 
 const fails: string[] = [];
 function check(name: string, cond: boolean, detail = "") {
@@ -236,6 +238,16 @@ check("reconciliation-pack passes",
 
 // registry completeness: all 12 skills registered
 check("12 schemas registered", Object.keys(SCHEMA_BY_SKILL).length === 12, String(Object.keys(SCHEMA_BY_SKILL).length));
+
+// --- automations + skill commands (shell prototype) -----------------------
+section("automations / skills UI catalog");
+check("daily IC automation exists", getAutomation("daily-ic-brief")?.skillId === "everlin-morning-brief");
+check("weekly IC automation exists", getAutomation("weekly-ic-brief")?.skillId === "everlin-weekly-ic-brief");
+check("evidence pack freeze exists", getAutomation("evidence-pack-freeze")?.skillId === "everlin-reconciliation-pack");
+check("every automation has a prompt", AUTOMATIONS.every((a) => a.prompt.length > 20));
+check("/brief is in the catalog", SKILL_COMMANDS.some((c) => c.cmd === "/brief"));
+check("slash filter /we matches weekly", filterSkillCommands("we").some((c) => c.cmd === "/weekly"));
+check("empty slash filter returns all", filterSkillCommands("").length === SKILL_COMMANDS.length);
 
 // --- summary --------------------------------------------------------------
 console.log("\n" + "=".repeat(52));
